@@ -1,0 +1,2 @@
+include LICENSE.txt
+include arline_quantum/qasm_parser/qasm_header/*.inc
