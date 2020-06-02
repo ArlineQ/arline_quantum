@@ -44,6 +44,7 @@ $ pip3 install -e .
 
 ## API documentation
 
+API documentation is here [documentation](https://arline-quantum.readthedocs.io/en/latest/).
 To generate HTML API documentation, run below command:
 
 ```console

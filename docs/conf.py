@@ -34,16 +34,23 @@
 # -- Project information -----------------------------------------------------
 import os
 import sys
+import sphinx_rtd_theme
 
 sys.path.insert(0, os.path.abspath("../"))
+autodoc_mock_imports = [
+    'ply',
+    'networkx',
+    'qiskit',
+    'cirq',
+]
 
 project = "Arline Quantum"
 copyright = "Copyright (C) 2019-2020 Turation Ltd"
 author = "Turation Ltd"
 
 # The full version, including alpha/beta/rc tags
-release = "0.1.4"
-
+release = "0.1.5"
+master_doc = "index"
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be
@@ -67,9 +74,9 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#
-html_theme = "alabaster"
-html_theme_options = {"logo": "arline_quantum_logo.png", "fixed_sidebar": True}
+html_theme = 'sphinx_rtd_theme'
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+
 
 html_sidebars = {
     "index": ["localtoc.html", "searchbox.html"],

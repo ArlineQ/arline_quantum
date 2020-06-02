@@ -55,8 +55,7 @@ class Ccnot(Gate):
 
     def __init__(self, *args):
         r"""Create a new gate
-
-    """
+        """
         super().__init__(*args)
 
     def calculate_u(self, args):
