@@ -25,10 +25,14 @@ class QubitConnectivity:
 
         An abstract qubit connectivity class
 
-    :param str name: name of connectivity
-    :param int num_qubits (int): number of qubits
-    :param list adj_matrix: adjacency matrix, 2D array of shape (num_qubits, num_qubits)
-    :param list connections_list: list of tuples, each tuple describes one connection if form `(qubit_from, qubit_to)`
+    :param name: name of connectivity
+    :type name: str
+    :param num_qubits: number of qubits
+    :type num_qubits: int
+    :param adj_matrix: adjacency matrix, 2D array of shape (num_qubits, num_qubits)
+    :type adj_matrix: list
+    :param connections_list: list of tuples, each tuple describes one connection if form `(qubit_from, qubit_to)`
+    :type connections_list: list
     """
 
     def __init__(self, name, num_qubits, connections_list=None, adj_matrix=None):
@@ -55,7 +59,8 @@ class QubitConnectivity:
     def name(self, value):
         """Set name
 
-        :param str value: name
+        :param value: name
+        :type value: str
         """
         self._name = value
 
@@ -68,7 +73,8 @@ class QubitConnectivity:
     def num_qubits(self, value):
         """Set number of qubit
 
-        :param int value: number of qubit
+        :param value: number of qubit
+        :type value: int
         """
         if self._num_qubits == value:
             return
@@ -89,7 +95,8 @@ class QubitConnectivity:
     def connectivity(self, value):
         """Set connectivity
 
-        :param matrix value: connectivity
+        :param value: connectivity
+        :type value: matrix
         """
         self._connectivity = np.array(value)
 
@@ -102,16 +109,20 @@ class QubitConnectivity:
     def add_connection(self, node_1, node_2):
         """Add connection between two nodes
 
-        :param int node_1: node number
-        :param int node_2: node number
+        :param node_1: node number
+        :type node_1: int
+        :param node_2: node number
+        :type node_2: int
         """
         self._connectivity[node_1][node_2] = 1
 
     def delete_connection(self, node_1, node_2):
         """Delete connection between two nodes
 
-        :param int node_1: node number
-        :param int node_2: node number
+        :param node_1: node number
+        :type node_1: int
+        :param node_2: node number
+        :type node_2: int
         """
         self._connectivity[node_1][node_2] = 0
 
@@ -149,7 +160,8 @@ class QubitConnectivity:
     def check_connection(self, connections):
         """Check connection between qubits
 
-        :param connnections tuple: nodes numbers
+        :param connnections: nodes numbers
+        :type connnections: tuple
 
         :return:
             :py:const:`True`: if qubit is connected to other
@@ -230,7 +242,8 @@ class QubitConnectivity:
     def delete_node(self, node):
         """Delete node
 
-        :param int node: node number
+        :param node: node number
+        :type node: int
         """
         for i in range(self.num_qubits):
             self._connectivity[i].pop(self.num_qubits - 1)
@@ -240,9 +253,12 @@ class QubitConnectivity:
     def find_path(self, start, end, path=[]):
         """Find path between two nodes
 
-        :param int start: start node number
-        :param int end: end node number
-        :param list path: list of nodes
+        :param start: start node number
+        :type start: int
+        :param end: end node number
+        :type end: int
+        :param path: list of nodes
+        :type path: list
 
         :return: list of nodes
         :rtype: list
@@ -262,9 +278,12 @@ class QubitConnectivity:
     def find_all_paths(self, start, end, path=[]):
         """Find all paths between two nodes
 
-        :param int start: start node number
-        :param int end: end node number
-        :param list path: list of nodes
+        :param start: start node number
+        :type start: int
+        :param end: end node number
+        :type end: int
+        :param path: list of nodes
+        :type path: list
 
         :return: list of paths
         :rtype: list
@@ -285,9 +304,12 @@ class QubitConnectivity:
     def find_shortest_path(self, start, end, path=[]):
         """Find the shortest path between two nodes
 
-        :param int start: start node number
-        :param int end: end node number
-        :param list path: list of nodes
+        :param start: start node number
+        :type start: int
+        :param end: end node number
+        :type end: int
+        :param path: list of nodes
+        :type path: list
 
         :return: list of nodes
         :rtype: list
@@ -348,7 +370,8 @@ class All2All(QubitConnectivity):
 
         Fully-Connected Qubit Connectivity
 
-    :param int num_qubits (int): number of qubits
+    :param num_qubits: number of qubits
+    :type num_qubits: int
     """
 
     def __init__(self, num_qubits):

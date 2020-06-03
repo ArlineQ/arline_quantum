@@ -25,8 +25,10 @@ class GateSet:
 
     Class to represent quantum *Gate Set*
 
-    :param Gate gate_list: dictionary of gates
-    :param str name: name of gate set
+    :param gate_list: dictionary of gates
+    :type gate_list: Gate
+    :param name: name of gate set
+    :type name: str
     """
 
     def __init__(self, name, gate_list):
@@ -76,7 +78,8 @@ class GateSet:
         """Generate new gate set with only gates with number of cubits less than
         ``num_qubits``
 
-        :param int num_qubits: border value for qubit number
+        :param num_qubits: border value for qubit number
+        :type num_qubits: int
         """
         if self.check_max_num_qubits() <= num_qubits:
             return self

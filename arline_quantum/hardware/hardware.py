@@ -32,11 +32,15 @@ class Hardware:
 
     An abstract quantum hardware configuration class
 
-    :param str name: name of configuration
-    :param int num_qubits: number of qubits
+    :param name: name of configuration
+    :type name: str
+    :param num_qubits: number of qubits
+    :type num_qubits: int
     :param QubitConnectivity: qubit connectivity
-    :param GateSet gate_set: dictionary of gates
-    :param dict num_gates: number of each type of gate, if :code:`num_gates[key] = -1`,
+    :param gate_set: dictionary of gates
+    :type gate_set: GateSet
+    :param num_gates: number of each type of gate, if :code:`num_gates[key] = -1`,
+    :type num_gates: dict
         number of gates is equal to infinity
     """
 

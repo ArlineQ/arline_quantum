@@ -99,9 +99,12 @@ class GateChain:
     def add_gate(self, gate, connections, force_connection=False):
         """Place gate to circuit
 
-        :param gate Gate: gate object
-        :param connections tuple: qubits to place the gate
-        :param force_connection bool: don't check qubit connection
+        :param gate: gate object
+        :type gate: Gate
+        :param connections: qubits to place the gate
+        :type connections: tuple
+        :param force_connection: don't check qubit connection
+        :type force_connection: bool
 
         :raises NoQubitConnectionError: when there is no connection between qubits
         """
@@ -119,9 +122,12 @@ class GateChain:
     def add_gate_left(self, gate, connections, force_connection=False):
         """Place gate to left end of the circuit
 
-        :param gate Gate: gate object
-        :param connections tuple: qubits to place the gate
-        :param force_connection bool: don't check qubit connection
+        :param gate: gate object
+        :type gate: Gate
+        :param connections: qubits to place the gate
+        :type connections: tuple
+        :param force_connection: don't check qubit connection
+        :type force_connection: bool
 
         :raises NoQubitConnectionError: when there is no connection between qubits
         """
@@ -139,11 +145,15 @@ class GateChain:
     def insert_gate(self, gate, connections, position, force_connection=False):
         """Place gate at a given position
 
-        :param gate Gate: gate object
-        :param connections tuple: qubits to place the gate
-        :param position int: index of the element before which to insert, in case of 0 gate will be places at
+        :param gate: gate object
+        :type gate: Gate
+        :param connections: qubits to place the gate
+        :type connections: tuple
+        :param position: index of the element before which to insert, in case of 0 gate will be places at
+        :type position: int
             the front of the circuit, and len(circuit) is equivalent to add_gate()
-        :param force_connection bool: don't check qubit connection
+        :param force_connection: don't check qubit connection
+        :type force_connection: bool
 
         :raises NoQubitConnectionError: when there is no connection between qubits
         """
