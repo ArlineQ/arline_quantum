@@ -16,6 +16,7 @@
 
 
 import numpy as np
+from itertools import combinations
 
 
 class QubitConnectivity:
@@ -177,9 +178,15 @@ class QubitConnectivity:
         # return True
         if len(connections) == 1:
             return True
-        elif self.connectivity[connections[0]][connections[1]] == 0:
-            return False
+        elif len(connections) == 2:
+            return self.connectivity[connections[0]][connections[1]] == 1
         else:
+            # Allow connection if number of qubits the gate acts
+            # on is larger then 2 (3-qubit gate, 4-qubit gate etc)
+            pairs = combinations(connections, 2)
+            for p in pairs:
+                if self.connectivity[tuple(p)] == 0:
+                    return False
             return True
 
     def get_num_nodes_with_given_num_connections(self, num_connections):
@@ -376,6 +383,3 @@ class All2All(QubitConnectivity):
 
     def __init__(self, num_qubits):
         super().__init__("all2all", num_qubits, adj_matrix=np.ones((num_qubits, num_qubits)) - np.eye(num_qubits))
-
-
-

@@ -30,6 +30,8 @@ from arline_quantum.gates.u3 import U3
 from arline_quantum.gate_sets.gate_set import GateSet
 from arline_quantum.hardware.hardware import Hardware
 from arline_quantum.gate_chain.gate_connection import GateConnection
+from arline_quantum.qubit_connectivity.qubit_connectivity import All2All
+from string import ascii_uppercase, ascii_lowercase
 
 
 class NoQubitConnectionError(Exception):
@@ -57,7 +59,7 @@ class GateChain:
     def __init__(self, quantum_hardware):
         self.chain = deque()
         self.quantum_hardware = quantum_hardware
-        self._matrix = None
+        self._matrix = None  # Cashed gate chain unitary
 
         self._new_gates_cnt_right = 0  # Used to perform incremental matrix update
         self._new_gates_cnt_left = 0  # Used to perform incremental matrix update
@@ -73,6 +75,16 @@ class GateChain:
 
     @property
     def matrix(self):
+        """Calculate unitary matrix corresponding to the gate chain.
+        Supports lazy matrix calculation, the call of self.matrix
+        will result in recalculation of cashed unitary U = self._matrix.
+        In order to update the cashed unitary after new gates were added to the
+        gate chain we first evaluate the unitary of the appended gates U_new_gates.
+        Then the resulting cashed unitary is the product U_new_gates * U or U * U_new_gates
+        depending on wheather the new gates were appended
+        to the beggining or end of the gate chain.
+        """
+        num_qubits = self.quantum_hardware.num_qubits
         if self.quantum_hardware is None:
             raise Exception("Quantum hardware isn't defined")
         if self._matrix is not None and 2 ** self.quantum_hardware.num_qubits != self._matrix.shape[0]:
@@ -84,14 +96,33 @@ class GateChain:
             self._new_gates_cnt_right = 0
             self._new_gates_cnt_left = 0
         if self._new_gates_cnt_left > 0:
+            # This part of code supposed to implement tensor contraction
+            # of U_new_gates corresponding to the gates added to the end
+            # of the chain and cashed unitary self._matrix.
+            # The code is commented out because it contains an error
+            # and fails test_reverse_matrix_building_order test.
+            #
+            # self._matrix = self._matrix.reshape(num_qubits * [2, 2])
+            # reversed_subchain = reversed(list(islice(self.chain, 0, self._new_gates_cnt_left)))
+            # for gate_connection in reversed_subchain:
+            #     self._matrix = self._add_unitary(gate_connection.gate,
+            #                                      gate_connection.connections,
+            #                                      self._matrix,
+            #                                      reverse_order=True)
+            # self._matrix = self._matrix.reshape((2**num_qubits, 2**num_qubits))
+            # self._new_gates_cnt_left = 0
             left_m = np.eye(2 ** self.quantum_hardware.num_qubits, dtype=np.complex_)
+            left_m = left_m.reshape(num_qubits * [2, 2])
             for gate_connection in islice(self.chain, 0, self._new_gates_cnt_left):
-                left_m = np.matmul(gate_connection.u, left_m)
+                left_m = self._add_unitary(gate_connection.gate, gate_connection.connections, left_m)
+            left_m = left_m.reshape((2 ** num_qubits, 2 ** num_qubits))
             self._matrix = np.matmul(self._matrix, left_m)
             self._new_gates_cnt_left = 0
         if self._new_gates_cnt_right > 0:
+            self._matrix = self._matrix.reshape(num_qubits * [2, 2])
             for gate_connection in islice(self.chain, len(self.chain) - self._new_gates_cnt_right, len(self.chain)):
-                self._matrix = np.matmul(gate_connection.u, self._matrix)
+                self._matrix = self._add_unitary(gate_connection.gate, gate_connection.connections, self._matrix)
+            self._matrix = self._matrix.reshape(2 ** num_qubits, 2 ** num_qubits)
             self._new_gates_cnt_right = 0
 
         return self._matrix
@@ -116,7 +147,6 @@ class GateChain:
             raise NoQubitConnectionError(connections, gate)
         gate_connection = GateConnection(self.quantum_hardware, gate, connections)
         self.chain.append(gate_connection)
-
         self._new_gates_cnt_right += 1
 
     def add_gate_left(self, gate, connections, force_connection=False):
@@ -139,7 +169,7 @@ class GateChain:
             raise NoQubitConnectionError(connections, gate)
         gate_connection = GateConnection(self.quantum_hardware, gate, connections)
         self.chain.appendleft(gate_connection)
-        self.noise = self.calculate_noise()
+        # self.noise = self.calculate_noise()
         self._new_gates_cnt_left += 1
 
     def insert_gate(self, gate, connections, position, force_connection=False):
@@ -174,11 +204,127 @@ class GateChain:
         self.chain.pop(gate_number)
         self._matrix = None
 
-    def _calculate_matrix(self):
-        u = np.eye(2 ** self.quantum_hardware.num_qubits, dtype=np.complex_)
-        for g in self.chain:
-            u = np.matmul(g.u, u)
+    # Calculating gate_chain unitary matrix using tensor contraction.
+    # The code in _add_unitary(...), _einsum_vecmul_index, _einsum_matmul_index_helper(..)
+    # is based on Qiskit's code, see
+    # qiskit-terra/qiskit/providers/basicaer/statevector_simulator.py.
+    # Modifications include: (1) modified Qiskit's code to implement Einstein
+    # index summation for matrix multiplication instead of vector-matrix multiplication;
+    # (2) added option for matrix multiplication in reverse order (reverse_order).
+    #
+    # Original code is licensed as stated below:
+    #
+    # (C) Copyright IBM 2017, 2018.
+    #
+    # This code is licensed under the Apache License, Version 2.0. You may
+    # obtain a copy of this license in the LICENSE.txt file in the root directory
+    # of this source tree or at http://www.apache.org/licenses/LICENSE-2.0.
+    #
+    # Any modifications or derivative works of this code must retain this
+    # copyright notice, and modified files need to carry a notice indicating
+    # that they have been altered from the originals.
+    def _einsum_vecmul_index(self, gate_indices, number_of_qubits, reverse_order=False):
+        """Return the index string for Numpy.einsum matrix-vector multiplication.
+        The returned indices are to perform a matrix multiplication A.v where
+        the matrix A is an M-qubit matrix, vector v is an N-qubit vector, and
+        M <= N, and identity matrices are implied on the subsystems where A has no
+        support on v.
+        Args:
+            gate_indices (list[int]): the indices of the right matrix subsystems
+                                      to contract with the left matrix.
+            number_of_qubits (int): the total number of qubits for the right matrix.
+            reverse_order (bool): if True, corresponds to tensor multiplication
+                                  in reverse order
+        Returns:
+            str: An indices string for the Numpy.einsum function.
+        """
+
+        mat_l, mat_r, tens_lin, tens_lout = self._einsum_matmul_index_helper(gate_indices, number_of_qubits)
+        # Swap indexes of left and right tensors
+        # (equivalent to tensor multiplication in reverse order)
+        if reverse_order:
+            mat_l, mat_r = mat_r, mat_l
+        # Combine indices into matrix multiplication string format
+        # for numpy.einsum function
+        indx = "{mat_l}{mat_r}, ".format(mat_l=mat_l, mat_r=mat_r) + "{tens_lin}...->{tens_lout}...".format(
+            tens_lin=tens_lin, tens_lout=tens_lout
+        )
+        return indx
+
+    def _einsum_matmul_index_helper(self, gate_indices, number_of_qubits):
+        """Return the index string for Numpy.einsum matrix multiplication.
+        The returned indices are to perform a matrix multiplication A.v where
+        the matrix A is an M-qubit matrix, matrix v is an N-qubit vector, and
+        M <= N, and identity matrices are implied on the subsystems where A has no
+        support on v.
+        Args:
+            gate_indices (list[int]): the indices of the right matrix subsystems
+                                       to contract with the left matrix.
+            number_of_qubits (int): the total number of qubits for the right matrix.
+        Returns:
+            tuple: (mat_left, mat_right, tens_in, tens_out) of index strings for
+            that may be combined into a Numpy.einsum function string.
+        Raises:
+            QiskitError: if the total number of qubits plus the number of
+            contracted indices is greater than 26.
+        """
+        # Since we use ASCII alphabet for einsum index labels we are limited
+        # to 26 total free left (lowercase) and 26 right (uppercase) indexes.
+        # The rank of the contracted tensor reduces this as we need to use that
+        # many characters for the contracted indices
+        if len(gate_indices) + number_of_qubits > 26:
+            raise ValueError("Total number of free indexes limited to 26")
+
+        # Indices for N-qubit input tensor
+        tens_in = ascii_lowercase[:number_of_qubits]
+
+        # Indices for the N-qubit output tensor
+        tens_out = list(tens_in)
+
+        # Left and right indices for the M-qubit multiplying tensor
+        mat_left = ""
+        mat_right = ""
+
+        # Update left indices for mat and output
+        for pos, idx in enumerate(reversed(gate_indices)):
+            mat_left += ascii_lowercase[-1 - pos]
+            mat_right += tens_in[-1 - idx]
+            tens_out[-1 - idx] = ascii_lowercase[-1 - pos]
+        tens_out = "".join(tens_out)
+        # Combine indices into matrix multiplication string format
+        # for numpy.einsum function
+        return mat_left, mat_right, tens_in, tens_out
+
+    def _add_unitary(self, gate, qubits, matrix, reverse_order=False):
+        """Apply an N-qubit unitary matrix.
+        Args:
+            gate (matrix_like): an N-qubit unitary matrix
+            qubits (list): the list of N-qubits to apply gate on.
+        """
+        # Get the number of qubits
+        qubits = list(reversed(qubits))
+        num_qubs_gate = len(qubits)
+        number_of_qubits = self.quantum_hardware.num_qubits
+        # Compute einsum index string for 1-qubit matrix multiplication
+        indexes = self._einsum_vecmul_index(qubits, number_of_qubits, reverse_order=reverse_order)
+        # Convert to complex rank-2N tensor
+        gate_tensor = np.reshape(np.array(gate._u, dtype=complex), num_qubs_gate * [2, 2])
+        # Apply matrix multiplication
+        u = np.einsum(indexes, gate_tensor, matrix, dtype=complex, casting="no")
         return u
+
+    def _calculate_matrix(self):
+        """Evaluate total unitary matrix of the circuit (gate chain).
+        """
+        number_of_qubits = self.quantum_hardware.num_qubits
+        matrix = np.eye(2 ** number_of_qubits, dtype=np.complex128)
+        matrix = matrix.reshape(number_of_qubits * [2, 2])
+
+        for g in self.chain:
+            qubits = g.connections
+            matrix = self._add_unitary(g, qubits, matrix)
+        matrix = matrix.reshape(2 ** number_of_qubits, 2 ** number_of_qubits)
+        return matrix
 
     def calculate_noise(self):
         if self.quantum_hardware is None:
@@ -291,14 +437,13 @@ class GateChain:
             ast = qasm_p.parse(qasm_data)
             hardware_from_qasm = quantum_hardware is None
             if quantum_hardware is None:
-                quantum_hardware = Hardware(
-                    f"FromQasm", num_qubits=0, gate_set=GateSet(f"FromQasm", [])
-                )
-
+                quantum_hardware = Hardware(f"FromQasm", num_qubits=0, gate_set=GateSet(f"FromQasm", []))
             # AstInterpreter can modufy hardware, so we need to make a copy
             gate_chain = GateChain(quantum_hardware.copy())
 
             AstInterpreter(gate_chain, hardware_from_qasm)._process_node(ast)
+            num_qubits = gate_chain.quantum_hardware.num_qubits
+
             return gate_chain
 
     @staticmethod
@@ -491,6 +636,8 @@ class AstInterpreter:
         elif node.type == "qreg":
             if self.hardware_from_qasm:
                 self.gate_chain.quantum_hardware.num_qubits += node.index
+                num_qubits = self.gate_chain.quantum_hardware.num_qubits
+                self.gate_chain.quantum_hardware.qubit_connectivity = All2All(num_qubits)
             self.gate_chain.quantum_hardware.add_qreg_mapping(node.name, node.index)
 
         elif node.type == "creg":
@@ -575,9 +722,6 @@ class AstInterpreter:
             name (str): operation name to apply to the Gate Chain
             params (list): op parameters
             qargs (list(Qubit)): qubits to attach to
-
-        Raises:
-            Runtime Error: if encountering a non-basis opaque gate
         """
         op = self._create_op(name, params)
         if not self.gate_chain.quantum_hardware.qubit_connectivity.check_connection(qargs) and self.hardware_from_qasm:
@@ -586,7 +730,7 @@ class AstInterpreter:
                 self.gate_chain.quantum_hardware.qubit_connectivity.add_connection(qargs[0], qargs[1])
                 self.gate_chain.quantum_hardware.qubit_connectivity.add_connection(qargs[1], qargs[0])
             else:
-                raise NotImplementedError()
+                pass
         self.gate_chain.add_gate(op, qargs)
 
     def _create_op(self, name, params):
