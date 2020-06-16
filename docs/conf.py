@@ -49,7 +49,7 @@ copyright = "Copyright (C) 2019-2020 Turation Ltd"
 author = "Turation Ltd"
 
 # The full version, including alpha/beta/rc tags
-release = "0.1.7"
+release = "0.1.8"
 master_doc = "index"
 # -- General configuration ---------------------------------------------------
 

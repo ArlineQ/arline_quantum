@@ -22,7 +22,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="arline-quantum",
-    version="0.1.7",
+    version="0.1.8",
     author="Turation Ltd",
     author_email="info@arline.io",
     description="Quantum Hardware Library",
