@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Turation Ltd
+# Copyright (c) 2019-2022 Turation Ltd
 
 from arline_quantum.gate_sets.pyzx import PyzxGateSet
 from arline_quantum.qubit_connectivities.qubit_connectivity import All2All, Line
