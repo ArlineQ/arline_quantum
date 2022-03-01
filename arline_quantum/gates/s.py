@@ -62,13 +62,13 @@ class S(Gate):
         )
         # fmt: on
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggered gate
 
         :return: new dagger gate
         :rtype: Gate
         """
-        return SD
+        return Sd()
 
     def to_qasm(self):
         r"""Describes how the gate will be shown in OPENQASM format.
@@ -94,13 +94,13 @@ class Sd(S):
         super().__init__(*args)
         self._u = self._conjugate_u(self._u)
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate
         """
-        return S
+        return S()
 
     def to_qasm(self):
         r"""Describes how the gate will be shown in OPENQASM format

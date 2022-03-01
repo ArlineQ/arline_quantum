@@ -51,6 +51,7 @@ class Crz(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 2  #: The number of qubits the gate acts on
+    num_angles = 1  #: The number of angles parameters (phi)
     graph_symbols = [".", "RZ"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):
@@ -76,8 +77,8 @@ class Crz(Gate):
         # fmt: on
         return np.kron(p0, identity) + np.kron(p1, rz)
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate

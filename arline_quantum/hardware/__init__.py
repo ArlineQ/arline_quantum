@@ -19,14 +19,15 @@ import inspect
 
 from arline_quantum.gate_sets.gate_set import GateSet
 from arline_quantum.hardware import (
-    basic_clifford_t,
-    basic_google,
-    basic_ibm,
-    basic_rigetti,
+    clifford_t,
+    google,
+    ibm,
+    ionq,
+    rigetti,
+    pyzx,
 )
-from arline_quantum.hardware.basic_hardware import BasicHardware
 from arline_quantum.hardware.hardware import Hardware
-from arline_quantum.qubit_connectivity.qubit_connectivity import All2All, QubitConnectivity
+from arline_quantum.qubit_connectivities.qubit_connectivity import All2All, QubitConnectivity
 
 
 def hardware_classes_from_module(module):
@@ -37,33 +38,54 @@ def hardware_classes_from_module(module):
     """
     return {n: c for n, c in inspect.getmembers(module, inspect.isclass) if issubclass(c, Hardware)}
 
+
 # Create Hardware by class name
 hardware_classes = {}
-hardware_classes.update(hardware_classes_from_module(basic_clifford_t))
-hardware_classes.update(hardware_classes_from_module(basic_google))
-hardware_classes.update(hardware_classes_from_module(basic_ibm))
-hardware_classes.update(hardware_classes_from_module(basic_rigetti))
+hardware_classes.update(hardware_classes_from_module(clifford_t))
+hardware_classes.update(hardware_classes_from_module(google))
+hardware_classes.update(hardware_classes_from_module(ibm))
+hardware_classes.update(hardware_classes_from_module(ionq))
+hardware_classes.update(hardware_classes_from_module(rigetti))
+hardware_classes.update(hardware_classes_from_module(pyzx))
 
 
-def hardware_by_name(configuration):
-    hardware_cfg = configuration["hardware"]
+def hardware_by_name(hardware):
+    if isinstance(hardware, Hardware):
+        return hardware
+    elif isinstance(hardware, dict):
+        if "class" in hardware:
+            kwargs = {}
+            try:
+                kwargs = hardware["args"]
+            except KeyError:
+                pass
 
-    if "name" in hardware_cfg:
-        kwargs = {}
-        try:
-            kwargs = hardware_cfg["args"]
-        except KeyError:
-            pass
+            hw = hardware_classes[hardware["class"]](**kwargs)
+            try:
+                hw.name = hardware["name"]
+            except KeyError:
+                pass
 
-        return hardware_classes[hardware_cfg["name"]](**kwargs)
+            try:
+                # patching gate set
+                gate_set = GateSet.from_config(hardware)
+                hw.gate_set = gate_set
+            except:
+                pass
+
+            return hw
+        else:
+            # Create Hardware
+            gate_set = GateSet.from_config(hardware)
+            try:
+                name = hardware["name"]
+            except KeyError:
+                name = "{}".format(gate_set.name)
+            connectivity = QubitConnectivity.from_config(hardware)
+
+            num_gates = None
+            if "num_gates" in hardware:
+                num_gates = hardware["num_gates"]
+            return Hardware(name, gate_set, connectivity, num_gates)
     else:
-        # Create BasicHardware
-        gate_set = GateSet.from_gate_names(hardware_cfg["gate_set"])
-        num_qubits = hardware_cfg["num_qubits"]
-        name = "{}_{}q".format(gate_set.name, num_qubits)
-        connectivity = QubitConnectivity.from_config(hardware_cfg)
-
-        num_gates = None
-        if "num_gates" in hardware_cfg:
-            num_gates = hardware_cfg["num_gates"]
-        return BasicHardware(name, num_qubits, gate_set, connectivity, num_gates)
+        raise TypeError("Wrong hardware input type")

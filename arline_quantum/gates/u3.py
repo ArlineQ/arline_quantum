@@ -50,6 +50,7 @@ class U3(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
+    num_angles = 3  #: The number of angles parameters (theta, lambda, phi)
     graph_symbols = ["U3"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):
@@ -60,9 +61,7 @@ class U3(Gate):
     def calculate_u(self, args):
         r"""Calculate matrix
         """
-        theta = args[0]
-        phi = args[1]
-        lam = args[2]
+        theta, phi, lam = args
         return np.array(
             [
                 [np.cos(theta / 2), -np.exp(1j * lam) * np.sin(theta / 2)],
@@ -71,8 +70,8 @@ class U3(Gate):
             dtype=complex,
         )
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate

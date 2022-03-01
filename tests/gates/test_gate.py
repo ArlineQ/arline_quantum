@@ -66,14 +66,14 @@ class TestGateCreation(unittest.TestCase):
         np.testing.assert_almost_equal(g_ref.u, g.u)
 
     def test_conjugate_on_discrete(self):
-        g_ref = Rx(2 * np.pi / 30).conjugate()
-        g = Rx.make_discrete(2 * np.pi / 30)().conjugate()
+        g_ref = Rx(2 * np.pi / 30).dagger()
+        g = Rx.make_discrete(2 * np.pi / 30)().dagger()
         self.assertEqual(g.is_discrete, True)
         np.testing.assert_almost_equal(g_ref.u, g.u)
 
     def test_conjugate_on_discrete_twice(self):
         g_ref = Rx(2 * np.pi / 30)
-        g = Rx.make_discrete(2 * np.pi / 30)().conjugate().conjugate()
+        g = Rx.make_discrete(2 * np.pi / 30)().dagger().dagger()
         self.assertEqual(g.is_discrete, True)
         np.testing.assert_almost_equal(g_ref.u, g.u)
 

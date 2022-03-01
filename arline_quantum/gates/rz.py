@@ -43,6 +43,7 @@ class Rz(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
+    num_angles = 1  #: The number of angles parameters (theta)
     graph_symbols = ["RZ"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):

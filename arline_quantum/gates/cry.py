@@ -53,6 +53,7 @@ class Cry(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 2  #: The number of qubits the gate acts on
+    num_angles = 1  #: The number of angles parameters (theta)
     graph_symbols = [".", "RY"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):
@@ -78,8 +79,8 @@ class Cry(Gate):
         # fmt: on
         return np.kron(p0, identity) + np.kron(p1, ry)
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate

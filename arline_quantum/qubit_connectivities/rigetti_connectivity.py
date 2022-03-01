@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-from arline_quantum.qubit_connectivity.qubit_connectivity import QubitConnectivity
+from arline_quantum.qubit_connectivities.qubit_connectivity import QubitConnectivity
 
 
 class Agave(QubitConnectivity):
@@ -32,18 +32,26 @@ class Agave(QubitConnectivity):
         connections_list = [
             [0, 1],
             [0, 7],
+            [1, 0],
             [1, 2],
-            [7, 6],
+            [2, 1],
             [2, 3],
+            [3, 2],
             [3, 4],
+            [4, 3],
             [4, 5],
+            [5, 4],
             [5, 6],
+            [6, 5],
+            [6, 7],
+            [7, 0],
+            [7, 6],
         ]
         super().__init__("agave", num_qubits, connections_list=connections_list)
 
 
 class AgaveSymmetrical(QubitConnectivity):
-    """Agave Symmetrical Qubit Connectivity
+    """AgaveSymmetrical Qubit Connectivity
 
     **Description:**
 
@@ -55,13 +63,10 @@ class AgaveSymmetrical(QubitConnectivity):
         num_qubits = 8
         connections_list = [
             [0, 1],
-            [1, 0],
             [0, 7],
-            [7, 0],
+            [1, 0],
             [1, 2],
             [2, 1],
-            [7, 6],
-            [6, 7],
             [2, 3],
             [3, 2],
             [3, 4],
@@ -70,9 +75,11 @@ class AgaveSymmetrical(QubitConnectivity):
             [5, 4],
             [5, 6],
             [6, 5],
+            [6, 7],
+            [7, 0],
+            [7, 6],
         ]
-        super().__init__("agave_symmetrical", num_qubits, connections_list=connections_list)
-
+        super().__init__("agave", num_qubits, connections_list=connections_list)
 
 class Aspen(QubitConnectivity):
     """Aspen Qubit Connectivity
@@ -89,31 +96,47 @@ class Aspen(QubitConnectivity):
             [0, 1],
             [0, 7],
             [0, 15],
+            [1, 0],
             [1, 2],
+            [1, 14],
+            [2, 1],
+            [2, 3],
+            [3, 2],
+            [3, 4],
+            [4, 3],
+            [4, 5],
+            [5, 4],
+            [5, 6],
+            [7, 0],
             [7, 6],
-            [7, 8],
+            [8, 9],
+            [8, 15],
+            [9, 8],
+            [9, 10],
+            [10, 9],
+            [10, 11],
+            [11, 10],
+            [11, 12],
+            [12, 11],
+            [12, 13],
+            [13, 12],
+            [13, 14],
+            [14, 1],
+            [14, 13],
+            [14, 15],
+            [15, 0],
             [15, 8],
             [15, 14],
-            [2, 3],
-            [3, 4],
-            [4, 5],
-            [5, 6],
-            [8, 9],
-            [9, 10],
-            [10, 11],
-            [11, 12],
-            [12, 13],
-            [13, 14],
         ]
         super().__init__("aspen", num_qubits, connections_list=connections_list)
 
 
 class AspenSymmetrical(QubitConnectivity):
-    """Aspen Symmetrical Qubit Connectivity
+    """AspenSymmetrical Qubit Connectivity
 
     **Description:**
 
-        Aspen Symmetrical Qubit Connectivity
+        Aspen Qubit Connectivity
 
     """
 
@@ -126,16 +149,14 @@ class AspenSymmetrical(QubitConnectivity):
             [7, 0],
             [0, 15],
             [15, 0],
+            [1, 0],
+            [0, 1],
             [1, 2],
             [2, 1],
-            [7, 6],
-            [6, 7],
-            [7, 8],
-            [8, 7],
-            [15, 8],
-            [8, 15],
-            [15, 14],
-            [14, 15],
+            [1, 14],
+            [14, 1],
+            [2, 1],
+            [1, 2],
             [2, 3],
             [3, 2],
             [3, 4],
@@ -144,8 +165,14 @@ class AspenSymmetrical(QubitConnectivity):
             [5, 4],
             [5, 6],
             [6, 5],
+            [7, 0],
+            [0, 7],
+            [7, 6],
+            [6, 7],
             [8, 9],
             [9, 8],
+            [8, 15],
+            [15, 8],
             [9, 10],
             [10, 9],
             [10, 11],
@@ -156,5 +183,13 @@ class AspenSymmetrical(QubitConnectivity):
             [13, 12],
             [13, 14],
             [14, 13],
+            [14, 15],
+            [15, 14],
+            [14, 1],
+            [1, 14],
+            [15, 0],
+            [0, 15],
+            [15, 8],
+            [8, 15],
         ]
         super().__init__("aspen_symmetrical", num_qubits, connections_list=connections_list)

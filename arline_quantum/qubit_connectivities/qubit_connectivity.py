@@ -16,7 +16,7 @@
 
 
 import numpy as np
-from itertools import combinations
+from itertools import permutations
 
 
 class QubitConnectivity:
@@ -48,8 +48,16 @@ class QubitConnectivity:
             self._connectivity = np.array(adj_matrix)
         else:
             self._connectivity = np.zeros((num_qubits, num_qubits))
-            for a, b in connections_list:
-                self.add_connection(a, b)
+            self.connections_list = connections_list
+
+    @property
+    def connections_list(self):
+        return [(a, b) for a, b in permutations(range(0, self.num_qubits), 2) if self._connectivity[a, b]]
+
+    @connections_list.setter
+    def connections_list(self, connections_list):
+        for a, b in connections_list:
+            self.add_connection(a, b)
 
     @property
     def name(self):
@@ -161,8 +169,8 @@ class QubitConnectivity:
     def check_connection(self, connections):
         """Check connection between qubits
 
-        :param connnections: nodes numbers
-        :type connnections: tuple
+        :param connections: nodes numbers
+        :type connections: tuple
 
         :return:
             :py:const:`True`: if qubit is connected to other
@@ -171,11 +179,7 @@ class QubitConnectivity:
 
         :rtype: bool
         """
-        # pairs = combinations(connections, 2)
-        # for p in pairs:
-        # if self.connectivity[tuple(p)] == 0:
-        # return False
-        # return True
+
         if len(connections) == 1:
             return True
         elif len(connections) == 2:
@@ -183,11 +187,14 @@ class QubitConnectivity:
         else:
             # Allow connection if number of qubits the gate acts
             # on is larger then 2 (3-qubit gate, 4-qubit gate etc)
-            pairs = combinations(connections, 2)
+            pairs = permutations(connections, 2)
             for p in pairs:
                 if self.connectivity[tuple(p)] == 0:
                     return False
             return True
+
+    def is_connected_to_any(self, qubit, other_qubits):
+        return any([self.check_connection([qubit, q]) for q in other_qubits])
 
     def get_num_nodes_with_given_num_connections(self, num_connections):
         """Get number of nodes with given number of connections
@@ -235,6 +242,13 @@ class QubitConnectivity:
             if self.connectivity[i].count(1) == num_nodes:
                 nodes.append(i)
         return nodes
+
+    def get_unconnected_qubits(self):
+        """Get list of unconnected qubits
+
+        :return: list of unconnected qubits
+        """
+        return [(a, b) for a, b in permutations(range(0, self.num_qubits), 2) if self.connectivity[a, b] == 0]
 
     def add_node(self):
         """Add node
@@ -345,29 +359,52 @@ class QubitConnectivity:
                     coupling_map.append([i, j])
         return coupling_map
 
-    @staticmethod
-    def from_config(hardware_cfg):
-        num_qubits = hardware_cfg["num_qubits"]
+    available_connectivity_classes = {}
+
+    @classmethod
+    def from_config(cls, hardware_cfg):
         if "qubit_connectivity" in hardware_cfg:
-            if isinstance(hardware_cfg["qubit_connectivity"], str):
-                if hardware_cfg["qubit_connectivity"] == "All2All":
-                    return All2All(num_qubits)
-                else:
+            if "class" in hardware_cfg["qubit_connectivity"]:
+                try:
+                    if hardware_cfg["qubit_connectivity"]["class"] == "All2All":
+                        num_qubits = hardware_cfg["qubit_connectivity"]["args"]["num_qubits"]
+                        return cls.available_connectivity_classes[hardware_cfg["qubit_connectivity"]["class"]](
+                            num_qubits
+                        )
+                    elif hardware_cfg["qubit_connectivity"]["class"] == "Line":
+                        num_qubits = hardware_cfg["qubit_connectivity"]["args"]["num_qubits"]
+                        return cls.available_connectivity_classes[hardware_cfg["qubit_connectivity"]["class"]](
+                            num_qubits
+                        )
+                    else:
+                        return cls.available_connectivity_classes[hardware_cfg["qubit_connectivity"]["class"]]()
+                except KeyError:
                     raise Exception("Wrong connectivity ID")
 
-        if "adj_matrix" in hardware_cfg:
-            return QubitConnectivity(
-                "adj_matrix {}".format(hardware_cfg["adj_matrix"]), num_qubits, adj_matrix=hardware_cfg["adj_matrix"],
-            )
+            if "adj_matrix" in hardware_cfg["qubit_connectivity"]:
+                num_qubits = hardware_cfg["qubit_connectivity"]["args"]["num_qubits"]
+                return QubitConnectivity(
+                    "adj_matrix {}".format(hardware_cfg["qubit_connectivity"]["adj_matrix"]),
+                    num_qubits,
+                    adj_matrix=hardware_cfg["qubit_connectivity"]["adj_matrix"],
+                )
 
-        if "connections_list" in hardware_cfg:
-            return QubitConnectivity(
-                "connections_list {}".format(hardware_cfg["connections_list"]),
-                num_qubits,
-                connections_list=hardware_cfg["connections_list"],
-            )
+            if "connections_list" in hardware_cfg["qubit_connectivity"]:
+                num_qubits = hardware_cfg["qubit_connectivity"]["args"]["num_qubits"]
+                return QubitConnectivity(
+                    "connections_list {}".format(hardware_cfg["qubit_connectivity"]["connections_list"]),
+                    num_qubits,
+                    connections_list=hardware_cfg["qubit_connectivity"]["connections_list"],
+                )
+        else:
+            num_qubits = hardware_cfg["num_qubits"]
+            return All2All(num_qubits)
 
-        return All2All(num_qubits)
+    @classmethod
+    def register_connectivity_class(cls, connectivity, name=None):
+        if name is None:
+            name = connectivity.__name__
+        cls.available_connectivity_classes[name] = connectivity
 
 
 class All2All(QubitConnectivity):
@@ -383,3 +420,38 @@ class All2All(QubitConnectivity):
 
     def __init__(self, num_qubits):
         super().__init__("all2all", num_qubits, adj_matrix=np.ones((num_qubits, num_qubits)) - np.eye(num_qubits))
+
+
+class Line(QubitConnectivity):
+    """Nearest Neighbour Qubit Connectivity
+
+    **Description:**
+
+        Nearest Neighbour Qubit Connectivity
+
+    :param num_qubits: number of qubits
+    :type num_qubits: int
+    """
+
+    def __init__(self, num_qubits):
+        connections_list = []
+        for i in range(1, num_qubits):
+            connections_list.append([i - 1, i])
+            connections_list.append([i, i - 1])
+        super().__init__("line", num_qubits, connections_list=connections_list)
+
+
+from arline_quantum.qubit_connectivities import ibm_connectivity
+from arline_quantum.qubit_connectivities import rigetti_connectivity
+from arline_quantum.qubit_connectivities import google_connectivity
+
+QubitConnectivity.register_connectivity_class(All2All)
+QubitConnectivity.register_connectivity_class(Line)
+QubitConnectivity.register_connectivity_class(ibm_connectivity.Rueschlikon)
+QubitConnectivity.register_connectivity_class(ibm_connectivity.RueschlikonSymmetrical)
+QubitConnectivity.register_connectivity_class(ibm_connectivity.Ourense)
+QubitConnectivity.register_connectivity_class(rigetti_connectivity.Agave)
+QubitConnectivity.register_connectivity_class(rigetti_connectivity.AgaveSymmetrical)
+QubitConnectivity.register_connectivity_class(rigetti_connectivity.Aspen)
+QubitConnectivity.register_connectivity_class(rigetti_connectivity.AspenSymmetrical)
+QubitConnectivity.register_connectivity_class(google_connectivity.Sycamore)

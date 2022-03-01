@@ -61,6 +61,11 @@ class T(Gate):
         )
         # fmt: on
 
+    def dagger(self):
+        """ Produce daggered gate
+        """
+        return Td()
+
     def to_qasm(self):
         r"""Describes how the gate will be shown in OPENQASM format.
         """
@@ -84,6 +89,11 @@ class Td(T):
         """
         super().__init__(*args)
         self._u = self._conjugate_u(self._u)
+
+    def dagger(self):
+        """ Produce daggered gate
+        """
+        return T()
 
     def to_qasm(self):
         r"""Describes how the gate will be shown in OPENQASM format

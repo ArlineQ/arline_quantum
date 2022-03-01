@@ -120,8 +120,51 @@ class GateSet:
         name = "+".join(gate_names)
         return GateSet(name, gate_classes)
 
+    available_gate_set_classes = {}
+
+    @classmethod
+    def from_config(cls, hardware_cfg):
+        if "gate_set_class" in hardware_cfg:
+            try:
+                return cls.available_gate_set_classes[hardware_cfg["gate_set_class"]]()
+            except KeyError:
+                raise Exception(f"Unsupported gate_set ID: {hardware_cfg['gate_set_class']}")
+
+        if "gate_set" in hardware_cfg:
+            return GateSet.from_gate_names(hardware_cfg["gate_set"])
+
+        raise Exception(f"Invalid GateSet configuration in hardware config: {hardware_cfg}")
+
+    @classmethod
+    def register_gate_set_class(cls, gate_set, name=None):
+        if name is None:
+            name = gate_set.__name__
+        cls.available_gate_set_classes[name] = gate_set
+
     def to_qiskit_name(self):
         gates = []
         for g in self.gate_list:
             gates.append(g.to_qiskit_name())
         return gates
+
+
+from arline_quantum.gate_sets import arline
+from arline_quantum.gate_sets import clifford_t
+from arline_quantum.gate_sets import cx_rz_rx
+from arline_quantum.gate_sets import full
+from arline_quantum.gate_sets import google
+from arline_quantum.gate_sets import ibm
+from arline_quantum.gate_sets import ionq
+from arline_quantum.gate_sets import pyzx
+from arline_quantum.gate_sets import rigetti
+
+
+GateSet.register_gate_set_class(arline.ArlineGateSet)
+GateSet.register_gate_set_class(clifford_t.CliffordTGateSet)
+GateSet.register_gate_set_class(cx_rz_rx.CnotRzRxGateSet)
+GateSet.register_gate_set_class(full.FullGateSet)
+GateSet.register_gate_set_class(google.GoogleGateSet)
+GateSet.register_gate_set_class(ibm.IbmGateSet)
+GateSet.register_gate_set_class(ionq.IonqGateSet)
+GateSet.register_gate_set_class(pyzx.PyzxGateSet)
+GateSet.register_gate_set_class(rigetti.RigettiGateSet)

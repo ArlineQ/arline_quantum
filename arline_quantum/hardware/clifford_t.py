@@ -16,33 +16,62 @@
 
 
 from arline_quantum.gate_sets.clifford_t import CliffordTGateSet
-from arline_quantum.qubit_connectivity.qubit_connectivity import All2All
-from arline_quantum.hardware.basic_hardware import BasicHardware
+from arline_quantum.qubit_connectivities.qubit_connectivity import All2All, Line
+from arline_quantum.hardware.hardware import Hardware
 
 
-class CliffordTAll2All(BasicHardware):
-    """Basic Fully Connected Quantum Hardware Configuration with Clifford + T Gate Set
+class CliffordTAll2All(Hardware):
+    """Fully Connected Quantum Hardware Configuration with Clifford + T Gate Set
 
     **Description:**
 
-        qubit_connectivity : fully connected
+        num_qubits : number of qubits
+
+        qubit_connectivity : :class:`.All2All`
 
         gate_set : :class:`.CliffordTGateSet`
 
         num_gates : infinity
 
-        gate_cost : equal, 1
+        qubit_cost : equal, 0
+    """
 
-        gate_noise : equal, 0
+    def __init__(
+        self,
+        num_qubits,
+    ):
+        connectivity = All2All(num_qubits)
+        super().__init__(
+            self.__class__.__name__,
+            qubit_connectivity=connectivity,
+            gate_set=CliffordTGateSet().reduce_gate_set(num_qubits),
+            num_gates=None,
+        )
+
+
+class CliffordTLine(Hardware):
+    """Nearest Neighbour Quantum Hardware Configuration with Clifford + T Gate Set
+
+    **Description:**
+
+        num_qubits : number of qubits
+
+        qubit_connectivity : :class:`.Line`
+
+        gate_set : :class:`.CliffordTGateSet`
+
+        num_gates : infinity
 
         qubit_cost : equal, 0
     """
 
-    def __init__(self, num_qubits):
-        connectivity = All2All(num_qubits)
+    def __init__(
+        self,
+        num_qubits,
+    ):
+        connectivity = Line(num_qubits)
         super().__init__(
             self.__class__.__name__,
-            num_qubits=num_qubits,
             qubit_connectivity=connectivity,
             gate_set=CliffordTGateSet().reduce_gate_set(num_qubits),
             num_gates=None,

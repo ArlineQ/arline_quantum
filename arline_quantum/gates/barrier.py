@@ -15,60 +15,42 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-import numpy as np
-
-from arline_quantum.gates.gate import Gate
+from arline_quantum.gates.instruction import Instruction
 
 
-class I(Gate):
+class Barrier(Instruction):
     r"""**Name:**
-        Identity Gate
+        :math:`Barrier` Instruction
 
     **Description:**
 
-        **Other names:**
-            :math:`I`, Idle
-
-        **Matrix:**
-
-            .. math::
-
-                \begin{bmatrix}
-                    1 & 0\\
-                    0 & 1
-                \end{bmatrix}
-
-        **Inverse:**
-            :math:`I^\dagger = I`
+        The :math:`Barrier` gate separates different parts of quantum circuit
 
     """
 
-    is_discrete = True  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
-    graph_symbols = ["I"]  #: List of pseudo graph symbols
+    num_cregs = 1  #: The number of classical bits to be measured
+    graph_symbols = ["B"]  #: List of pseudo graph symbols
 
-    def __init__(self, *args):
-        """Create a new gate
+    def __init__(self, qreg_name='q', *args):
+        r"""Create a new measurement gate
         """
         super().__init__(*args)
-
-    def calculate_u(self, args):
-        r"""Calculate matrix
-        """
-        return np.eye(2)
-
-    def dagger(self):
-        """ Produce daggered gate
-        """
-        return self
+        # fmt: off
 
     def to_qasm(self):
-        r"""Describes how the gate will be shown in OPENQASM format
+        r"""Describes how the gate will be shown in OPENQASM format.
         """
-        return "id"
+        return "barrier"
+
+    @staticmethod
+    def args_to_str(*args):
+        r"""Describes how the barrier parameters will be shown.
+        """
+        return ""
 
     @staticmethod
     def to_qiskit_name():
-        r"""Convert to Qiskit gate name
+        r"""Convert to Qiskit gate name.
         """
-        return "id"
+        return "barrier"

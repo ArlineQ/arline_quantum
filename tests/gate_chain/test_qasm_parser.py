@@ -45,7 +45,7 @@ class TestQasmParser(unittest.TestCase):
         test_dir = path.dirname(path.abspath(__file__))
         output_dir = path.join(test_dir, "small_angle_result.qasm")
         gate_chain = GateChain.from_qasm(input_dir)
-        gate_chain.save_to_qasm(output_dir, qreg_name="q0")
+        gate_chain.save_to_qasm(output_dir, qreg_name="q0", creg_name="c0")
 
         file = open(input_dir, mode="r", encoding="utf-8-sig")
         lines_ref = file.readlines()

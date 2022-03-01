@@ -33,9 +33,12 @@ setuptools.setup(
     license="GNU Affero General Public License v3 (AGPLv3)",
     install_requires=[
         "numpy>=1.18.3",
-        "scipy>=1.3.1",
-        "cirq~=0.6.0",
-        "qiskit~=0.18.0",
+        "scipy>=1.4",
+        "cirq==0.13.1",
+        "qiskit~=0.34.2",
+        "pyzx==0.6.0",
+        # old qiskit version to support pytket-qiskit
+        # "qiskit~=0.18.0",
         "sympy>=1.5",
     ],
     classifiers=[

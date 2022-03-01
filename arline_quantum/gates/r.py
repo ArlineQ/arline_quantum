@@ -46,6 +46,7 @@ class R(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
+    num_angles = 2  #: The number of angles parameters (theta, phi)
     graph_symbols = ["R"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):
@@ -66,8 +67,8 @@ class R(Gate):
             dtype=np.complex_,
         )
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate
