@@ -82,3 +82,5 @@ arline_quantum
     ├── qasm_files            # .qasm files for gate_chain test
     └── qubit_connectivity    # tests for qubit connectivity class
 ```
+
+**Arline team**: Yaroslav Kharkov, Eugeny Mikhantyev, Alina Ivanova, Alex Kotelnikov
