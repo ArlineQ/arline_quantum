@@ -15,27 +15,32 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
+from arline_quantum.gates.cnot import Cnot
 from arline_quantum.gates.cz import Cz
+from arline_quantum.gates.h import H
+from arline_quantum.gates.z import Z
+from arline_quantum.gates.s import Sd, S
+from arline_quantum.gates.t import Td, T
 from arline_quantum.gates.rx import Rx
 from arline_quantum.gates.rz import Rz
+from arline_quantum.gates.ccnot import Ccnot
+
 from arline_quantum.gate_sets.gate_set import GateSet
-import numpy as np
 
 
-class RigettiGateSet(GateSet):
-    """Rigetti Gate Set
+class PyzxGateSet(GateSet):
+    """PyZX Gate Set
+
+    .. Note::
+        This is Universal Gate Set
 
     **Description:**
 
-        Continuous + discrete Gate Set
+        Discrete + Continous Gate Set
 
-        [:class:`.Cz`, :class:`.Rx`, :class:`.Rz`]
+        [:class:`.H`, :class:`.S`, :class:`.Sd`, :class:`.Cnot`, :class:`.T`, :class:`.Td`,
+        :class:`.Z`, :class:`.Rx`, :class:`.Rz`, :class:`.Ccnot`, :class:`.Cz`]
     """
 
     def __init__(self):
-        super().__init__(self.__class__.__name__, [Cz,
-                                                   Rx.make_discrete(np.pi/2),
-                                                   Rx.make_discrete(-np.pi/2),
-                                                   Rx.make_discrete(np.pi),
-                                                   Rx.make_discrete(-np.pi),
-                                                   Rz])
+        super().__init__(self.__class__.__name__, [H, S, Sd, T, Td, Cnot, Z, Rx, Rz, Ccnot, Cz])

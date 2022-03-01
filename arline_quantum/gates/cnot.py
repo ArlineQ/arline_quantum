@@ -71,6 +71,11 @@ class Cnot(Gate):
         )
         # fmt: on
 
+    def dagger(self):
+        """ Produce daggered gate
+        """
+        return self
+
     def to_qasm(self):
         r"""Describes how the gate will be shown in OPENQASM format
         """

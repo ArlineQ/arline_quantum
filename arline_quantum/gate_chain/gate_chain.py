@@ -16,22 +16,29 @@
 
 
 from collections import OrderedDict, deque
-
 from copy import copy
 from itertools import islice
+from string import ascii_lowercase, ascii_uppercase
+import pickle
 
 import numpy as np
+from sympy.combinatorics.permutations import Permutation
 
-from arline_quantum.qasm_parser.qasmparser import QasmParser
+from arline_quantum.gate_chain.gate_connection import GateConnection
+from arline_quantum.gate_sets.gate_set import GateSet
 from arline_quantum.gates import qasm_gate_table as qasm_gate_table_all
 from arline_quantum.gates.cnot import Cnot
 from arline_quantum.gates.gate import Gate
+from arline_quantum.gates.instruction import Instruction
 from arline_quantum.gates.u3 import U3
-from arline_quantum.gate_sets.gate_set import GateSet
+from arline_quantum.gates.swap import Swap
+from arline_quantum.gates.measure import Measure
+from arline_quantum.gates.barrier import Barrier
 from arline_quantum.hardware.hardware import Hardware
-from arline_quantum.gate_chain.gate_connection import GateConnection
-from arline_quantum.qubit_connectivity.qubit_connectivity import All2All
-from string import ascii_uppercase, ascii_lowercase
+from arline_quantum.qasm_parser.qasmparser import QasmParser
+from arline_quantum.qubit_connectivities.qubit_connectivity import All2All, QubitConnectivity
+from arline_quantum.gates.gate import Gate
+from qiskit.exceptions import QiskitError
 
 
 class NoQubitConnectionError(Exception):
@@ -65,13 +72,20 @@ class GateChain:
         self._new_gates_cnt_left = 0  # Used to perform incremental matrix update
 
         self.chain_labels = []
-        # for i in range(1, self.num_qubits + self.num_qubits - 1):
-        #     string_labels = []
-        #     if i % 2 == 1:
-        #         string_labels.append('-')
-        #     else:
-        #         string_labels.append(' ')
-        #     self.chain_labels.append(string_labels)
+
+        self.qreg_mapping = {}
+        self.creg_mapping = {}
+
+        # Initialise default qreg_mapping
+        if self.quantum_hardware.num_qubits > 0:
+            self.qreg_mapping["q"] = {q: q for q in range(self.quantum_hardware.num_qubits)}
+            self.creg_mapping["c"] = {c: c for c in range(self.quantum_hardware.num_cbits)}
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self.chain[key]
+        if isinstance(key, slice):
+            return list(islice(self.chain, key.start, key.stop, key.step))
 
     @property
     def matrix(self):
@@ -81,13 +95,16 @@ class GateChain:
         In order to update the cashed unitary after new gates were added to the
         gate chain we first evaluate the unitary of the appended gates U_new_gates.
         Then the resulting cashed unitary is the product U_new_gates * U or U * U_new_gates
-        depending on wheather the new gates were appended
-        to the beggining or end of the gate chain.
+        depending on whatever the new gates were appended
+        to the beginning or end of the gate chain.
         """
         num_qubits = self.quantum_hardware.num_qubits
+        if len(self.qreg_mapping) == 0: # If there is no qreg in gate chain
+            self._matrix = np.eye(2 ** num_qubits, dtype=np.complex_)
+            return self._matrix
         if self.quantum_hardware is None:
             raise Exception("Quantum hardware isn't defined")
-        if self._matrix is not None and 2 ** self.quantum_hardware.num_qubits != self._matrix.shape[0]:
+        if self._matrix is not None and 2 ** num_qubits != self._matrix.shape[0]:
             print("Warning: Number of qubits changed in hardware")
             self._matrix = None
 
@@ -99,39 +116,25 @@ class GateChain:
             # This part of code supposed to implement tensor contraction
             # of U_new_gates corresponding to the gates added to the end
             # of the chain and cashed unitary self._matrix.
-            # The code is commented out because it contains an error
-            # and fails test_reverse_matrix_building_order test.
-            #
-            # self._matrix = self._matrix.reshape(num_qubits * [2, 2])
-            # reversed_subchain = reversed(list(islice(self.chain, 0, self._new_gates_cnt_left)))
-            # for gate_connection in reversed_subchain:
-            #     self._matrix = self._add_unitary(gate_connection.gate,
-            #                                      gate_connection.connections,
-            #                                      self._matrix,
-            #                                      reverse_order=True)
-            # self._matrix = self._matrix.reshape((2**num_qubits, 2**num_qubits))
-            # self._new_gates_cnt_left = 0
-            left_m = np.eye(2 ** self.quantum_hardware.num_qubits, dtype=np.complex_)
-            left_m = left_m.reshape(num_qubits * [2, 2])
+            left_m = np.eye(2 ** num_qubits, dtype=np.complex_)
             for gate_connection in islice(self.chain, 0, self._new_gates_cnt_left):
                 left_m = self._add_unitary(gate_connection.gate, gate_connection.connections, left_m)
-            left_m = left_m.reshape((2 ** num_qubits, 2 ** num_qubits))
             self._matrix = np.matmul(self._matrix, left_m)
             self._new_gates_cnt_left = 0
         if self._new_gates_cnt_right > 0:
-            self._matrix = self._matrix.reshape(num_qubits * [2, 2])
             for gate_connection in islice(self.chain, len(self.chain) - self._new_gates_cnt_right, len(self.chain)):
                 self._matrix = self._add_unitary(gate_connection.gate, gate_connection.connections, self._matrix)
-            self._matrix = self._matrix.reshape(2 ** num_qubits, 2 ** num_qubits)
             self._new_gates_cnt_right = 0
 
-        return self._matrix
+        # Add virtual swap gates corresponding to the relabeling of input/output qubits
+        matrix_after_relabeling = self._add_virtual_swaps(self._matrix)
+        return matrix_after_relabeling
 
-    def add_gate(self, gate, connections, force_connection=False):
+    def add_gate(self, gate, connections, cregs=[], force_connection=False):
         """Place gate to circuit
 
         :param gate: gate object
-        :type gate: Gate
+        :type gate: Instruction
         :param connections: qubits to place the gate
         :type connections: tuple
         :param force_connection: don't check qubit connection
@@ -141,19 +144,20 @@ class GateChain:
         """
         if self.quantum_hardware is None:
             raise Exception("Quantum hardware isn't defined")
-        if not (issubclass(type(gate), Gate)):
-            raise Exception("Gate isn't gate type")
+        # TODO: Check why issubclass returns False
+        # if not (issubclass(type(gate), Instruction)):
+        #     raise Exception("Gate isn't Instruction type")
         if not force_connection and not self.quantum_hardware.qubit_connectivity.check_connection(connections):
             raise NoQubitConnectionError(connections, gate)
-        gate_connection = GateConnection(self.quantum_hardware, gate, connections)
+        gate_connection = GateConnection(self.quantum_hardware, gate, connections, cregs)
         self.chain.append(gate_connection)
         self._new_gates_cnt_right += 1
 
-    def add_gate_left(self, gate, connections, force_connection=False):
+    def add_gate_left(self, gate, connections, cregs=[], force_connection=False):
         """Place gate to left end of the circuit
 
         :param gate: gate object
-        :type gate: Gate
+        :type gate: Instruction
         :param connections: qubits to place the gate
         :type connections: tuple
         :param force_connection: don't check qubit connection
@@ -163,20 +167,20 @@ class GateChain:
         """
         if self.quantum_hardware is None:
             raise Exception("Quantum hardware is not set")
-        if not (issubclass(type(gate), Gate)):
-            raise Exception("Gate isn't Gate type")
+        if not (issubclass(type(gate), Instruction)):
+            raise Exception("Gate isn't Instruction type")
         if not force_connection and not self.quantum_hardware.qubit_connectivity.check_connection(connections):
             raise NoQubitConnectionError(connections, gate)
-        gate_connection = GateConnection(self.quantum_hardware, gate, connections)
+        gate_connection = GateConnection(self.quantum_hardware, gate, connections, cregs)
         self.chain.appendleft(gate_connection)
         # self.noise = self.calculate_noise()
         self._new_gates_cnt_left += 1
 
-    def insert_gate(self, gate, connections, position, force_connection=False):
+    def insert_gate(self, gate, connections, position, cregs=[], force_connection=False):
         """Place gate at a given position
 
         :param gate: gate object
-        :type gate: Gate
+        :type gate: Instruction
         :param connections: qubits to place the gate
         :type connections: tuple
         :param position: index of the element before which to insert, in case of 0 gate will be places at
@@ -192,17 +196,158 @@ class GateChain:
 
         if self.quantum_hardware is None:
             raise Exception("Quantum hardware isn't defined")
-        if not (issubclass(type(gate), Gate)):
-            raise Exception("Gate isn't gate type")
+        if not (issubclass(type(gate), Instruction)):
+            raise Exception("Gate isn't Instruction type")
         if not force_connection and not self.quantum_hardware.qubit_connectivity.check_connection(connections):
             raise NoQubitConnectionError(connections, gate)
-        gate_connection = GateConnection(self.quantum_hardware, gate, connections)
+        gate_connection = GateConnection(self.quantum_hardware, gate, connections, cregs)
         self.chain.insert(position, gate_connection)
         self._matrix = None
 
     def delete_gate(self, gate_number):
         self.chain.pop(gate_number)
         self._matrix = None
+
+    def extend(self, c, force_connection=False):
+        """Extend GateChain object by appending elements from c"""
+        for gate_connection in c:
+            self.add_gate(
+                gate_connection.gate,
+                gate_connection.connections,
+                gate_connection.cregs,
+                force_connection=force_connection,
+            )
+
+    def strip_empty_qubits(self, num_qubits=None):
+        """Strip empty qubits from the GateChain.
+        Returns: (GateChain, remapping_dict).
+        Stripped GateChain object has number of qubits equal to
+        populated_qubits_cnt and qubit_connectivity respects connectivity of the original GateChain segment.
+        Requires remapping of original qubit placement to a new placement.
+        Remapping dictionary has following format {q_old: q_new}.
+        Currently implemented a trivial remapping approach: first in - first out.
+        """
+        populated_qubits_cnt = 0
+        seen_qubits = []
+        for i in range(self.quantum_hardware.num_qubits):
+            if self.get_num_gates_by_qubits(i) != 0:
+                populated_qubits_cnt += 1
+                seen_qubits.append(i)
+
+        if num_qubits is not None:
+            if populated_qubits_cnt > num_qubits:
+                raise Exception(
+                    f"num_qubits = {num_qubits} should be >= than populated_qubits_cnt = {populated_qubits_cnt}"
+                )
+            populated_qubits_cnt = num_qubits
+
+        # Add some qubits to seen to prevent compressed circuit mapping error
+        while len(seen_qubits) < populated_qubits_cnt:
+            # Hack suitable only for line connectivity to fill voids
+            for candidate in range(min(seen_qubits) + 1, max(seen_qubits)):
+                if candidate not in seen_qubits:
+                    if self.quantum_hardware.qubit_connectivity.is_connected_to_any(candidate, seen_qubits):
+                        seen_qubits.append(candidate)
+                        if len(seen_qubits) >= populated_qubits_cnt:
+                            break
+
+            if len(seen_qubits) >= populated_qubits_cnt:
+                break
+
+            for candidate in range(self.quantum_hardware.num_qubits):
+                if candidate not in seen_qubits:
+                    if self.quantum_hardware.qubit_connectivity.is_connected_to_any(candidate, seen_qubits):
+                        seen_qubits.append(candidate)
+                        if len(seen_qubits) >= populated_qubits_cnt:
+                            break
+
+        hw_name = "Stripped" + self.quantum_hardware.name
+        gate_set = self.quantum_hardware.gate_set
+
+        q_old = sorted(seen_qubits)
+        q_new = list(range(populated_qubits_cnt))
+
+        remapping_dict = dict(zip(q_old, q_new))
+
+        qubit_connectivity = QubitConnectivity("stripped_connectivity", populated_qubits_cnt, connections_list=[])
+
+        for q1 in q_old:
+            for q2 in q_old:
+                # Check if there is a connection in original hardware
+                if (q1, q2) in self.quantum_hardware.qubit_connectivity.connections_list:
+                    # Add connection for corresponding qubits in 'stripped' hardware
+                    q1_new, q2_new = remapping_dict[q1], remapping_dict[q2]
+                    qubit_connectivity.add_connection(q1_new, q2_new)
+
+        stripped_hw = Hardware(
+            name=hw_name, qubit_connectivity=qubit_connectivity, gate_set=gate_set
+        )
+
+        return self.remap_qubits(stripped_hw, remapping_dict), remapping_dict
+
+    def remap_qubits(self, new_hardware, remapping_dict):
+        new_chain = GateChain(new_hardware)
+        for el in self.chain:
+            g, old_conn = el.gate, el.connections
+            new_conn = [remapping_dict[i] for i in old_conn]
+            new_chain.add_gate(g, new_conn)
+
+        return new_chain
+
+    def dagger(self):
+        """Daggered GateChain"""
+        dagger_chain = GateChain(self.quantum_hardware)
+        for el in reversed(self.chain):
+            dagger_chain.add_gate(el.gate.dagger(), el.connections)
+        return dagger_chain
+
+    def shuffle_gates(self, seed=1):
+        """GateChain with shuffled gates"""
+        np.random.seed(seed)
+        new_chain = GateChain(self.quantum_hardware)
+        new_chain.chain = np.random.permutation(self.chain)
+        return new_chain
+
+    def cnot_parity_matrix(self):
+        """Return Cnot parity matrix for Cnot-only GateChain"""
+        for el in self.chain:
+            assert el.gate.__class__.__name__ == 'Cnot', "Gate chain should consist of CNOTs only"
+        num_qubits = self.quantum_hardware.num_qubits
+        parity_m = np.eye(num_qubits, dtype=np.int64)
+        for el in self.chain:
+            g, conn = el.gate, el.connections
+            cntrl, targ = conn[0], conn[1]
+            parity_m[targ, :] = (parity_m[cntrl, :] + parity_m[targ, :]) % 2
+        return parity_m
+
+    def clifford_parity_matrix(self):
+        """Return Clifford parity matrix for Clifford-only GateChain"""
+        # Clifford circuit compressed representation, see https://arxiv.org/pdf/1305.0810.pdf
+        n = self.quantum_hardware.num_qubits
+        parity_m = np.eye(2 * n, dtype=np.int64)
+
+        for el in self.chain:
+            g, conn = el.gate, el.connections
+            g_name = g.__class__.__name__
+            if g_name == "Cnot":
+                # Cnot(cntrl=i, targ=j) -> Add row i to row j, add row j+n to row i+n
+                cntrl, targ = conn[0], conn[1]
+                parity_m[targ, :] = (parity_m[cntrl, :] + parity_m[targ, :]) % 2
+                parity_m[cntrl + n, :] = (parity_m[cntrl + n, :] + parity_m[targ + n, :]) % 2
+            elif g_name == "H":
+                # H(i) -> Exchange rows i and i+num_qubits
+                i = conn[0]
+                row1 = parity_m[i]
+                row2 = parity_m[i + n]
+                parity_m[i] = row2
+                parity_m[i + n] = row1
+            elif g_name == "S" or "Sd":
+                # S(i) -> Add row i to row i+num_qubits
+                i = conn[0]
+                parity_m[i + n] = (parity_m[i] + parity_m[i + n]) % 2
+            else:
+                raise ValueError('Gate chain should consist of Clifford gates (Cnot, H, S)')
+        return parity_m
 
     # Calculating gate_chain unitary matrix using tensor contraction.
     # The code in _add_unitary(...), _einsum_vecmul_index, _einsum_matmul_index_helper(..)
@@ -239,7 +384,9 @@ class GateChain:
             str: An indices string for the Numpy.einsum function.
         """
 
-        mat_l, mat_r, tens_lin, tens_lout = self._einsum_matmul_index_helper(gate_indices, number_of_qubits)
+        mat_l, mat_r, tens_lin, tens_lout = self._einsum_matmul_index_helper(
+            gate_indices, number_of_qubits, reverse_order=reverse_order
+        )
         # Swap indexes of left and right tensors
         # (equivalent to tensor multiplication in reverse order)
         if reverse_order:
@@ -251,7 +398,7 @@ class GateChain:
         )
         return indx
 
-    def _einsum_matmul_index_helper(self, gate_indices, number_of_qubits):
+    def _einsum_matmul_index_helper(self, gate_indices, number_of_qubits, reverse_order=False):
         """Return the index string for Numpy.einsum matrix multiplication.
         The returned indices are to perform a matrix multiplication A.v where
         the matrix A is an M-qubit matrix, matrix v is an N-qubit vector, and
@@ -301,29 +448,88 @@ class GateChain:
             gate (matrix_like): an N-qubit unitary matrix
             qubits (list): the list of N-qubits to apply gate on.
         """
+        # If Instruction do not recalculate matrix
+        if not isinstance(gate, Gate):
+            return matrix
         # Get the number of qubits
         qubits = list(reversed(qubits))
         num_qubs_gate = len(qubits)
-        number_of_qubits = self.quantum_hardware.num_qubits
+        num_qubits = self.quantum_hardware.num_qubits
         # Compute einsum index string for 1-qubit matrix multiplication
-        indexes = self._einsum_vecmul_index(qubits, number_of_qubits, reverse_order=reverse_order)
+        indexes = self._einsum_vecmul_index(qubits, num_qubits, reverse_order=reverse_order)
         # Convert to complex rank-2N tensor
         gate_tensor = np.reshape(np.array(gate._u, dtype=complex), num_qubs_gate * [2, 2])
+        # Reshape original matrix to a tensor form
+        matrix = matrix.reshape([2, 2] * num_qubits)
         # Apply matrix multiplication
-        u = np.einsum(indexes, gate_tensor, matrix, dtype=complex, casting="no")
+        u = np.einsum(indexes, gate_tensor, matrix, dtype=complex, casting="no").reshape(
+            (2 ** num_qubits, 2 ** num_qubits)
+        )
         return u
+
+    def add_qreg_mapping(self, qreg_name, qreg_size):
+        if qreg_name in self.qreg_mapping:
+            raise ValueError(f"Error: Qreg name {qreg_name} already exists")
+
+        start_qbit = sum([len(r) for r in self.qreg_mapping.values()])
+        if start_qbit + qreg_size > self.quantum_hardware.num_qubits:
+            raise ValueError(f"Hardware can't fit qreg {qreg_name} with size {qreg_size}")
+        self.qreg_mapping[qreg_name] = {v: v + start_qbit for v in range(qreg_size)}
+
+    def add_creg_mapping(self, creg_name, creg_size):
+        if creg_name in self.creg_mapping:
+            raise ValueError(f"Error: Creg name {creg_name} already exists")
+        start_cbit = sum([len(r) for r in self.creg_mapping.values()])
+        if start_cbit + creg_size > self.quantum_hardware.num_cbits:
+            raise ValueError(f"Hardware can't fit creg {creg_name} with size {creg_size}")
+        self.creg_mapping[creg_name] = {v: v + start_cbit for v in range(creg_size)}
+
+    def qreg_qubit_index(self, qreg_name, qreg_qubit):
+        return self.qreg_mapping[qreg_name][qreg_qubit]
+
+    def _add_virtual_swaps(self, matrix):
+        """Add virtual Swap gates and recalculates unitary matrix corresponding to:
+                (1) relabeling of input logical qubits due to mapping to physical qubits
+                (2) reordering of output qubits due to reordering of measure gates
+        Args:
+            matrix: (np.array), cashed unitary matrix
+        """
+        # Get the number of qubits
+        # (1) insert virtual Swap gates due to relabeling of input logical qubits due to mapping to physical qubits
+        assert len(self.qreg_mapping) == 1, f"Only one quantum register is supported for fidelity calculation: detected {len(self.qreg_mapping)}"
+        qreg_name = list(self.qreg_mapping.keys())[0]
+        permutation = list(self.qreg_mapping[qreg_name].values())
+        tmp_chain = GateChain(self.quantum_hardware)
+        for (i, j) in reversed(Permutation(permutation).transpositions()):
+            tmp_chain.add_gate(Swap(), [i, j], force_connection=True)  # TODO this operation doesn't check connectivity
+        matrix_l = tmp_chain._calculate_matrix()
+
+        # (2) insert virtual Swap gates due to reordering of measure gates
+        creg_mapping = {}
+        for el in self.chain:
+            if isinstance(el.gate, Measure):
+                creg_mapping[el.connections[0]] = el.cregs[0]
+        tmp_chain = GateChain(self.quantum_hardware)
+        permutation = [p[1] for p in sorted(creg_mapping.items(), key=lambda x: x[0])]
+
+        # print('QASM!!!', self.to_qasm())
+
+        for (i, j) in reversed(Permutation(permutation).transpositions()):
+            tmp_chain.add_gate(Swap(), [i, j], force_connection=True)  # TODO this operation doesn't check connectivity
+
+        matrix_r = tmp_chain._calculate_matrix()
+        matrix = np.matmul(matrix_r, np.matmul(matrix, matrix_l))
+
+        return matrix
 
     def _calculate_matrix(self):
         """Evaluate total unitary matrix of the circuit (gate chain).
         """
         number_of_qubits = self.quantum_hardware.num_qubits
         matrix = np.eye(2 ** number_of_qubits, dtype=np.complex128)
-        matrix = matrix.reshape(number_of_qubits * [2, 2])
 
         for g in self.chain:
-            qubits = g.connections
-            matrix = self._add_unitary(g, qubits, matrix)
-        matrix = matrix.reshape(2 ** number_of_qubits, 2 ** number_of_qubits)
+            matrix = self._add_unitary(g.gate, g.connections, matrix)
         return matrix
 
     def calculate_noise(self):
@@ -346,37 +552,44 @@ class GateChain:
         s = "[" + ", ".join([str(g) for g in self.chain]) + "]"
         return "Gate Chain " + s
 
-    def load_chain(self, file):
-        raise Exception("load_chain isn't defined")
-
-    def save_chain(self, file):
-        raise Exception("save_chain isn't defined")
-
     def find_subchain(self, subchain):
         raise Exception("find_subchain isn't defined")
 
-    def add_subchain(self, subchain):
-        raise Exception("add_subchain isn't defined")
-
     def get_depth(self):
-        if self.quantum_hardware is None:
-            raise Exception("Quantum hardware isn't defined")
-        length = 0
-        for q in range(self.quantum_hardware.num_qubits):
-            if length < self.get_num_gates_by_qubit(q):
-                length = self.get_num_gates_by_qubit(q)
-        return length
+        "Calculates depth of the gate chain by converting it to QiskitCircuit"
+        # TODO: implement our own get_depth based on dag representation
+        qiskit_circuit = self.convert_to(format_id="qiskit")
+        depth = qiskit_circuit.depth()
+        return depth
 
     def get_depth_qubit(self):
         if self.quantum_hardware is None:
             raise Exception("Quantum hardware isn't defined")
-        length = 0
+        depth = 0
         qubit = 0
         for q in range(self.quantum_hardware.num_qubits):
-            if length < self.get_num_gates_by_qubit(q):
-                length = self.get_num_gates_by_qubit(q)
+            if depth < self.get_num_gates_by_qubits(q):
+                depth = self.get_num_gates_by_qubits(q)
                 qubit = q
         return qubit
+
+    def get_depth_by_gate_type(self, gate_names):
+        """ Calculates depth by gate type
+            Args:
+                gate_names (List(str))
+            List of gate names
+            Returns:
+                depth (int)
+        """
+        if self.quantum_hardware is None:
+            raise Exception("Quantum hardware isn't defined")
+        tmp_chain = GateChain(self.quantum_hardware)
+        for el in self:
+            g, conn, cregs = el.gate, el.connections, el.cregs
+            if g.name in gate_names and isinstance(g, Gate):
+                tmp_chain.add_gate(g, conn, cregs=cregs, force_connection=True)
+        depth = tmp_chain.get_depth()
+        return depth
 
     def get_num_gates(self):
         return self.__len__()
@@ -385,25 +598,78 @@ class GateChain:
         if self.quantum_hardware is None:
             raise Exception("Quantum hardware isn't defined")
         gates = {}
-        for g in self.quantum_hardware.gate_set.gate_list:
-            gates[g.__name__] = self.get_num_gates_by_gate_type(g)
+        for conn in self.chain:
+            g = conn._gate
+            if g.name not in gates:
+                gates[g.name] = 0
+            gates[g.name] += 1
         return gates
+
+    def get_n_qubit_gate_count(self, n):
+        """ Calculates number of n-qubit gates in the gate chain, e.g.
+        number of single qubit gates (n=1), two qubit gates (n=2), etc.
+        """
+        gate_count = len([gc._gate for gc in self.chain if gc._gate.num_qubits == n])
+        return gate_count
 
     def delete_subchain(self, subchain):
         raise Exception("'delete_subchain' function isn't defined")
 
-    def get_num_gates_by_gate_type(self, gate, gate_num=None):
+    def get_gate_count_by_gate_type(self, gate, gate_num=None):
         i = 0
         for g in islice(self.chain, 0, gate_num):
             if type(g.gate) is gate:
                 i = i + 1
         return i
 
-    def get_num_gates_by_qubit(self, n):
-        return len([g for g in self.chain if n in g.connections])
+    def check_connectivity(self):
+        """Check connectivity violations
 
-    def get_gates_by_qubit(self, n):
-        return [g for g in self.chain if n in g.connections]
+        :return: list of connectivity violations
+        """
+        violations = [
+            (indx, str(g))
+            for indx, g in enumerate(self.chain)
+            if not self.quantum_hardware.qubit_connectivity.check_connection(g.connections)
+        ]
+        return violations
+
+    def check_gate_set(self):
+        """ Check gate set violations
+        :return: list of gate set violations
+        """
+        violations = [
+            (indx, str(g.gate))
+            for indx, g in enumerate(self.chain)
+            if not any(isinstance(g.gate, t) for t in self.quantum_hardware.gate_set.gate_list)
+        ]
+        return violations
+
+    def check_qubit_number(self):
+        """
+        :return: violations of gate number
+        """
+        violations = [
+            (indx, str(g.gate))
+            for indx, g in enumerate(self.chain)
+            for con in g.connections if con > self.quantum_hardware.num_qubits
+        ]
+        return violations
+
+    def get_num_gates_by_qubits(self, qubits):
+        """ Get number of gates by qubit number
+
+        :param qubits: qubit number or list of qubits
+        :return:
+        """
+        return len(self.get_gates_by_qubits(qubits))
+
+    def get_gates_by_qubits(self, qubits):
+        return [
+            g
+            for g in self.chain
+            if all(item in g.connections for item in (qubits if type(qubits) is list else [qubits]))
+        ]
 
     def copy(self):
         c = GateChain(self.quantum_hardware)
@@ -412,17 +678,28 @@ class GateChain:
             c._matrix = self._matrix.copy()
         return c
 
-    def to_qasm(self, qreg_name="q"):
+    def save_chain(self, fname):
+        with open(fname, "wb") as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def load_chain(self, fname):
+        with open(fname, "rb") as f:
+            gate_chain = pickle.load(fname)
+        return gate_chain
+
+    def to_qasm(self, qreg_name="q", creg_name="c"):
         s = "// Copyright (c) 2019 Turation Ltd\n" "\n" "OPENQASM 2.0;\n" 'include "qelib1.inc";\n'
-        s += "\n" "qreg " + qreg_name + "[" + str(self.quantum_hardware.num_qubits) + "];" + "\n" "\n"
+        s += "\n" "qreg " + qreg_name + "[" + str(self.quantum_hardware.num_qubits) + "];" + "\n"
+        s += "creg " + creg_name + "[" + str(self.quantum_hardware.num_qubits) + "];" "\n"
         gate_list = [g.to_qasm(qreg_name) for g in self.chain]
         s += "\n".join(gate_list)
         s += "\n"
         return s
 
-    def save_to_qasm(self, output_dir, qreg_name="q"):
+    def save_to_qasm(self, output_dir, qreg_name="q", creg_name="c"):
         with open(output_dir, "w") as f:
-            s = self.to_qasm(qreg_name=qreg_name)
+            s = self.to_qasm(qreg_name=qreg_name, creg_name=creg_name)
             f.write(s)
         return True
 
@@ -437,10 +714,14 @@ class GateChain:
             ast = qasm_p.parse(qasm_data)
             hardware_from_qasm = quantum_hardware is None
             if quantum_hardware is None:
-                quantum_hardware = Hardware(f"FromQasm", num_qubits=0, gate_set=GateSet(f"FromQasm", []))
-            # AstInterpreter can modufy hardware, so we need to make a copy
+                connectivity = All2All(0)
+                quantum_hardware = Hardware(
+                    f"FromQasm",
+                    gate_set=GateSet(f"FromQasm", []),
+                    qubit_connectivity=connectivity
+                )
+            # AstInterpreter can modify hardware, so we need to make a copy
             gate_chain = GateChain(quantum_hardware.copy())
-
             AstInterpreter(gate_chain, hardware_from_qasm)._process_node(ast)
             num_qubits = gate_chain.quantum_hardware.num_qubits
 
@@ -491,6 +772,39 @@ class GateChain:
                     else:
                         return -np.pi
 
+    converters = {}
+
+    @classmethod
+    def convert_from(cls, circuit_object, format_id, **kwargs):
+        """Creates GateChain from another quantum framework circuit object
+        :param circuit_object: Object to convert
+        :param format_id: Format ID
+        :type format_id: str
+        """
+        if format_id not in cls.converters:
+            raise RuntimeError(f"Format ID {format_id} is not supported")
+
+        return cls.converters[format_id].to_gate_chain(circuit_object, **kwargs)
+
+    def convert_to(self, format_id, **kwargs):
+        """Converts GateChain object to one of frameworks or formats
+        :param format_id: Format ID
+        :type format_id: str
+
+        """
+        if format_id not in self.converters:
+            raise RuntimeError(f"Format ID {format_id} is not supported")
+
+        return self.converters[format_id].from_gate_chain(self, **kwargs)
+
+    @classmethod
+    def register_converter(cls, converter_class):
+        """Register class to perform gate chain conversion
+        :param converter_class: Converter class
+        :type converter_class: GateChainConverter
+        """
+        cls.converters[converter_class.format_id] = converter_class
+
 
 class AstInterpreter:
     """Interprets an OpenQASM by expanding subroutines and unrolling loops
@@ -533,20 +847,27 @@ class AstInterpreter:
         """
         reg = None
 
+        if node.name in self.gate_chain.qreg_mapping:
+            reg = self.gate_chain.qreg_mapping[node.name]
+        elif node.name in self.gate_chain.creg_mapping:
+            reg = self.gate_chain.creg_mapping[node.name]
+
         if node.type == "indexed_id":
             # An indexed bit or qubit
-            return [self.gate_chain.quantum_hardware.qreg_qubit_index(node.name, node.index)]
+            # return [self.gate_chain.quantum_hardware.qreg_qubit_index(node.name, node.index)]
+            return [reg[node.index]]
+
         elif node.type == "id":
-            raise NotImplementedError()
+            # raise NotImplementedError()
             # # A qubit or qreg or creg
-            # if not self.bit_stack[-1]:
-            #     # Global scope
-            #     return list(reg)
-            # else:
-            #     # local scope
-            #     if node.name in self.bit_stack[-1]:
-            #         return [self.bit_stack[-1][node.name]]
-            #     raise RuntimeError("expected local bit name:", "line=%s" % node.line, "file=%s" % node.file)
+            if not self.bit_stack[-1]:
+                # Global scope
+                return list(reg)
+            else:
+                # local scope
+                if node.name in self.bit_stack[-1]:
+                    return [self.bit_stack[-1][node.name]]
+                raise RuntimeError("expected local bit name:", "line=%s" % node.line, "file=%s" % node.file)
         return None
 
     def _process_custom_unitary(self, node):
@@ -616,8 +937,26 @@ class AstInterpreter:
                 self.gate_chain.add_gate(Cnot(), [id0[0], id1[idx]])
 
     def _process_measure(self, node):
-        """Process a measurement node"""
-        raise NotImplementedError()
+        """Process a measurement node."""
+
+        id0 = self._process_bit_id(node.children[0])
+        id1 = self._process_bit_id(node.children[1])
+
+        if len(id0) != len(id1):
+            raise QiskitError("Internal error: reg size mismatch", "line=%s" % node.line, "file=%s" % node.file)
+        for idx, idy in zip(id0, id1):
+            meas_gate = Measure()
+            meas_gate.condition = None
+            self.gate_chain.add_gate(meas_gate, connections=[idx], cregs=[idy])
+
+    def _process_barrier(self, node):
+        """Process a barrier node."""
+        ids = self._process_node(node.children[0])
+        qubits = []
+        for qubit in ids:
+            for j, _ in enumerate(qubit):
+                qubits.append(qubit[j])
+        self.gate_chain.add_gate(Barrier(), connections=qubits, cregs=[])
 
     def _process_if(self, node):
         """Process an if node"""
@@ -638,10 +977,13 @@ class AstInterpreter:
                 self.gate_chain.quantum_hardware.num_qubits += node.index
                 num_qubits = self.gate_chain.quantum_hardware.num_qubits
                 self.gate_chain.quantum_hardware.qubit_connectivity = All2All(num_qubits)
-            self.gate_chain.quantum_hardware.add_qreg_mapping(node.name, node.index)
+                self.gate_chain.quantum_hardware.update_name()
+            self.gate_chain.add_qreg_mapping(node.name, node.index)
 
         elif node.type == "creg":
-            pass  # TODO creg is not implemented in gate chain
+            if self.hardware_from_qasm:
+                self.gate_chain.quantum_hardware.num_cbits += node.index
+            self.gate_chain.add_creg_mapping(node.name, node.index)
 
         elif node.type == "id":
             raise RuntimeError("Internal Error: _process_node on id")
@@ -694,7 +1036,7 @@ class AstInterpreter:
             self.version = node.version()
 
         elif node.type == "barrier":
-            raise NotImplementedError()
+            self._process_barrier(node)
 
         elif node.type == "reset":
             raise NotImplementedError()
@@ -744,3 +1086,9 @@ class AstInterpreter:
         else:
             raise RuntimeError("Unknown operation for last node name %s" % name)
         return op
+
+
+from arline_quantum.gate_chain.converters import QiskitGateChainConverter, CirqGateChainConverter
+
+GateChain.register_converter(QiskitGateChainConverter)
+GateChain.register_converter(CirqGateChainConverter)

@@ -19,28 +19,24 @@ import numpy as np
 import types
 
 from fractions import Fraction
-from copy import copy
+
+from arline_quantum.gates.instruction import Instruction
 
 
-class Gate:
+class Gate(Instruction):
     """An abstract quantum gate class
     """
 
     is_discrete = None  #: Flag for discrete or continuous
-    num_qubits = None  #: The number of qubits the gate acts on
-    graph_symbols = None  #: List of pseudo graph symbols
+    num_cregs = 0  # Gate doesn't have classical registers
+    num_angles = 0  # The number of angles parameters
 
     def __init__(self, *args):
-        self.args = args
+        super().__init__(*args)
 
     @property
     def args(self):
-        """Get new args
-
-        :return: gate args
-        :rtype: list
-        """
-        return copy(self._args)
+        return self._args
 
     @args.setter
     def args(self, args):
@@ -65,8 +61,8 @@ class Gate:
     def u(self, v):
         raise Exception("Matrix can not be changed")
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate
@@ -82,7 +78,7 @@ class Gate:
         else:
             return str(self.__class__.__name__) + self.args_to_str(*self._args)
 
-    def angles(self, representation='rational'):
+    def angles(self, representation="rational"):
         r"""Convert args into list of strings.
         """
         return self.format_args(*self._args, representation=representation)
@@ -120,7 +116,7 @@ class Gate:
                     if abs(koeff - round(koeff, 2)) < 1e-7:
                         # Rational approximation is good enough
                         if abs(num) == 1 and den == 1:
-                            a_str = "pi" if num > 0 else "-pi"
+                            a_str = "1*pi" if num > 0 else "-1*pi"
                         elif den == 1:
                             a_str = "{:}*pi".format(num)
                         else:
@@ -147,11 +143,11 @@ class Gate:
             def discrete_init(self):
                 cls.__init__(self, *args)
 
-            def conjugate(self):
-                g = self._continuous_conjugate()
+            def dagger(self):
+                g = self._continuous_dagger()
                 g.is_discrete = True
-                g._continuous_conjugate = g.conjugate
-                g.conjugate = types.MethodType(conjugate, g)
+                g._continuous_dagger = g.dagger
+                g.dagger = types.MethodType(dagger, g)
 
                 return g
 
@@ -159,18 +155,8 @@ class Gate:
                 class_name = f"{cls.__name__}({cls.args_to_str(*args)})"
 
             discrete_class = type(class_name, (cls,), {"__init__": discrete_init, "is_discrete": True})
-            discrete_class._continuous_conjugate = discrete_class.conjugate
-            discrete_class.conjugate = conjugate
+            discrete_class._continuous_dagger = discrete_class.dagger
+            discrete_class.dagger = dagger
+            discrete_class.num_angles = 0
 
             return discrete_class
-
-    def to_qasm(self, *args):
-        r"""Describes how the gate will be shown in OPENQASM format.
-        """
-        return NotImplementedError()
-
-    @staticmethod
-    def to_qiskit_name():
-        r"""Convert to Qiskit gate name.
-        """
-        return NotImplementedError()

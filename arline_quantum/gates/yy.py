@@ -44,6 +44,7 @@ class Yy(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 2  #: The number of qubits the gate acts on
+    num_angles = 1  #: The number of angles parameters (phi)
     graph_symbols = ["IY", "IY"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):
@@ -58,8 +59,8 @@ class Yy(Gate):
         y_pauli = np.array([[0, -1j], [1j, 0]], dtype=np.complex_)
         return linalg.expm(-1j * phi / 2.0 * np.kron(y_pauli, y_pauli))
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate

@@ -44,6 +44,7 @@ class Ry(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
+    num_angles = 1  #: The number of angles parameters (theta)
     graph_symbols = ["RY"]  #: List of pseudo graph symbols
     is_qasm_composite = False
 
@@ -59,8 +60,8 @@ class Ry(Gate):
         y_pauli = np.array([[0, -1j], [1j, 0]], dtype=np.complex_)
         return linalg.expm(-1j * theta / 2.0 * y_pauli)
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate

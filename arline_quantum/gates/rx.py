@@ -45,6 +45,7 @@ class Rx(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
+    num_angles = 1  #: The number of angles parameters (theta)
     graph_symbols = ["RX"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):
@@ -59,8 +60,8 @@ class Rx(Gate):
         x_pauli = np.array([[0, 1], [1, 0]], dtype=np.complex_)
         return linalg.expm(-1j * theta / 2.0 * x_pauli)
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate

@@ -18,9 +18,9 @@
 from copy import deepcopy
 
 import networkx as nx
-import numpy as np
+import re
 
-from arline_quantum.qubit_connectivity.qubit_connectivity import All2All, QubitConnectivity
+from arline_quantum.qubit_connectivities.qubit_connectivity import All2All, QubitConnectivity
 
 from cirq import LineQubit
 from qiskit.providers.models import GateConfig, QasmBackendConfiguration
@@ -36,28 +36,33 @@ class Hardware:
     :type name: str
     :param num_qubits: number of qubits
     :type num_qubits: int
-    :param QubitConnectivity: qubit connectivity
+    :param qubit_connectivity: qubit connectivity
+    :type qubit_connectivity: QubitConnectivity
     :param gate_set: dictionary of gates
     :type gate_set: GateSet
     :param num_gates: number of each type of gate, if :code:`num_gates[key] = -1`,
-    :type num_gates: dict
-        number of gates is equal to infinity
+    :type num_gates: dictionary
     """
 
-    def __init__(self, name, num_qubits, gate_set, qubit_connectivity=None, num_gates=None):
-        self.name = name
-        self.qreg_mapping = {}
+    def __init__(
+        self,
+        name,
+        gate_set,
+        qubit_connectivity,
+        num_gates=None,
+        single_qubit_gate_fidelity=.999,
+        two_qubit_gate_fidelity=.99,
+    ):
+        if not isinstance(qubit_connectivity, QubitConnectivity):
+            raise Exception("qubit_connectivity must be QubitConnectivity object")
 
-        if qubit_connectivity is not None:
-            if not issubclass(type(qubit_connectivity), QubitConnectivity):
-                raise Exception("qubit_connectivity must be QubitConnectivity object")
-
-            self.qubit_connectivity = qubit_connectivity
-        else:
-            self.qubit_connectivity = All2All(num_qubits)
-
-        self.num_qubits = num_qubits
+        self.qubit_connectivity = qubit_connectivity
+        self.name = f"{name}{self.num_qubits}Q"
+        self.num_cbits = self.num_qubits
         self.gate_set = gate_set
+
+        self.single_qubit_gate_fidelity = single_qubit_gate_fidelity
+        self.two_qubit_gate_fidelity = two_qubit_gate_fidelity
 
         self.num_gates = {g: -1 for g in self.gate_set.get_gate_names()}
         if num_gates is not None:
@@ -68,32 +73,11 @@ class Hardware:
 
     @property
     def num_qubits(self):
-        return self._num_qubits
+        return self.qubit_connectivity.num_qubits
 
     @num_qubits.setter
     def num_qubits(self, num_qubits):
-        qreg_qubits = sum([len(r) for r in self.qreg_mapping.values()])
-        if num_qubits < qreg_qubits:
-            raise ValueError(f"qreg contains {qreg_qubits}, can't set num_qubits = {num_qubits}")
-        self._num_qubits = num_qubits
         self.qubit_connectivity.num_qubits = num_qubits
-
-    def add_qreg_mapping(self, qreg_name, qreg_size):
-        if qreg_name in self.qreg_mapping:
-            raise ValueError(f"Error: Qreg name {qreg_name} already exists")
-        start_qbit = sum([len(r) for r in self.qreg_mapping.values()])
-        if start_qbit + qreg_size > self.num_qubits:
-            raise ValueError(f"Hardware can't fit qreg {qreg_size} with size {qreg_name}")
-        self.qreg_mapping[qreg_name] = {v: v + start_qbit for v in range(qreg_size)}
-
-    def qreg_qubit_index(self, qreg_name, qreg_qubit):
-        return self.qreg_mapping[qreg_name][qreg_qubit]
-
-    def calculate_gate_chain_cost(self, gate_chain):
-        raise NotImplementedError()
-
-    def calculate_gate_chain_noise(self, *args):
-        raise NotImplementedError()
 
     def print_config(self):
         """Print Configuration
@@ -102,6 +86,12 @@ class Hardware:
         print("Number of Qubits: ", self.num_qubits)
         print("Qubit Connectivity: ", str(self.qubit_connectivity))
         print("Gate Set: ", str(self.gate_set))
+
+    def update_name(self):
+        """Update Hardware Name
+        """
+        match = re.match(r"([a-z]+)([0-9]+)([a-z]+)", self.name, re.I)
+        self.name = f"{match.group(1)}{self.num_qubits}Q"
 
     def convert_to_qiskit_hardware(self):
         configuration = QasmBackendConfiguration(
@@ -123,8 +113,8 @@ class Hardware:
 
     def convert_to_nx_graph(self):
         adj_matrix = self.qubit_connectivity.connectivity
-        if not np.array_equal(adj_matrix, adj_matrix.T):
-            raise Exception("CirQ graph supports only non-directed adjacency graphs")
+        # if not np.array_equal(adj_matrix, adj_matrix.T):
+        #     raise Exception("CirQ graph supports only non-directed adjacency graphs")
         graph = nx.Graph()
         for edge in self.qubit_connectivity.get_coupling_map():
             graph.add_edges_from([(LineQubit(edge[0]), LineQubit(edge[1]))])

@@ -43,6 +43,7 @@ class U1(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
+    num_angles = 1  #: The number of angles parameters (lambda)
     graph_symbols = ["U1"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):

@@ -48,6 +48,7 @@ class U2(Gate):
 
     is_discrete = False  #: Flag for discrete or continuous
     num_qubits = 1  #: The number of qubits the gate acts on
+    num_angles = 2  #: The number of angles parameters (lambda, phi)
     graph_symbols = ["U2"]  #: List of pseudo graph symbols
 
     def __init__(self, *args):
@@ -68,8 +69,8 @@ class U2(Gate):
             dtype=complex,
         )
 
-    def conjugate(self):
-        """ Produce conjugated gate
+    def dagger(self):
+        """ Produce daggerd gate
 
         :return: new dagger gate
         :rtype: Gate

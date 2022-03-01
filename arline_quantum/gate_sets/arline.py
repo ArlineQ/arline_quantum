@@ -15,30 +15,20 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-from arline_quantum.hardware.hardware import Hardware
+from arline_quantum.gates.u3 import U3
+from arline_quantum.gates.cnot import Cnot
+from arline_quantum.gate_sets.gate_set import GateSet
 
 
-class BasicHardware(Hardware):
-    """Basic Quantum Hardware Configuration with gate noise is equal to 0 for each gate and gate cost is equal to 1
+class ArlineGateSet(GateSet):
+    """Arline Gate Set
 
     **Description:**
 
-        gate_cost : equal, 1
+        Arline Gate Set
 
-        gate_noise : equal, 0
+        [:class:`.U3`, :class:`.Cnot`]
     """
 
-    def __init__(self, name, num_qubits, gate_set, qubit_connectivity=None, num_gates=None):
-        super().__init__(
-            name=name,
-            num_qubits=num_qubits,
-            qubit_connectivity=qubit_connectivity,
-            gate_set=gate_set,
-            num_gates=num_gates,
-        )
-
-    def calculate_gate_chain_cost(self, gate_chain):
-        return len(gate_chain)
-
-    def calculate_gate_chain_noise(self, gate_chain):
-        return 0
+    def __init__(self):
+        super().__init__(self.__class__.__name__, [U3, Cnot])
