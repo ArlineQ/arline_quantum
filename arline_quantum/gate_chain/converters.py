@@ -21,7 +21,7 @@ import tempfile
 from arline_quantum.gate_chain.gate_chain import GateChain
 
 from qiskit import QuantumCircuit
-from cirq.contrib.qasm_import import circuit_from_qasm, circuit_to_qasm_str
+from cirq.contrib.qasm_import import circuit_from_qasm, circuit_to_qasm_str, circuit_from_qasm_str
 from cirq import NamedQubit
 
 
