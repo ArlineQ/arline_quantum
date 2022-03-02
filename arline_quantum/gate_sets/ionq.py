@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Turation Ltd
+# Copyright (c) 2019-2022 Turation Ltd
 
 from arline_quantum.gates.rx import Rx
 from arline_quantum.gates.rz import Rz
