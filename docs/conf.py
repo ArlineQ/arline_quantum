@@ -1,5 +1,5 @@
 # Arline Quantum
-# Copyright (C) 2019-2020 Turation Ltd
+# Copyright (C) 2019-2022 Turation Ltd
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -45,7 +45,7 @@ autodoc_mock_imports = [
 ]
 
 project = "Arline Quantum"
-copyright = "Copyright (C) 2019-2020 Turation Ltd"
+copyright = "Copyright (C) 2019-2022 Turation Ltd"
 author = "Turation Ltd"
 
 # The full version, including alpha/beta/rc tags
