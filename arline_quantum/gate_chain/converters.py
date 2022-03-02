@@ -21,7 +21,8 @@ import tempfile
 from arline_quantum.gate_chain.gate_chain import GateChain
 
 from qiskit import QuantumCircuit
-from cirq.contrib.qasm_import import circuit_from_qasm, circuit_to_qasm_str, circuit_from_qasm_str
+from cirq.contrib.qasm_import import circuit_from_qasm
+import pytket.qasm as pyqasm
 from cirq import NamedQubit
 
 
@@ -99,12 +100,12 @@ class PytketGateChainConverter(GateChainConverter):
     @staticmethod
     def from_gate_chain(gate_chain):
         qasm = gate_chain.to_qasm(qreg_name="q")
-        circuit_object = circuit_from_qasm_str(qasm)
+        circuit_object = pyqasm.circuit_from_qasm_str(qasm)
         return circuit_object
 
     @staticmethod
     def to_gate_chain(circuit_object, qmap=None, **kwargs):
-        qasm_data = circuit_to_qasm_str(circuit_object)
+        qasm_data = pyqasm.circuit_to_qasm_str(circuit_object)
         lines = qasm_data.split("\n")
         gate_chain = GateChain.from_qasm_list_of_lines(lines, **kwargs)
         assert len(gate_chain.qreg_mapping) == 1, "Only one quantum register is supported in Pytket converter"
