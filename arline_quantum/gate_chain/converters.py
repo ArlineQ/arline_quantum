@@ -91,3 +91,31 @@ class CirqGateChainConverter(GateChainConverter):
         gate_chain = GateChain.from_qasm_list_of_lines(lines, quantum_hardware=None)
 
         return gate_chain
+
+
+class PytketGateChainConverter(GateChainConverter):
+    format_id = "pytket"
+
+    @staticmethod
+    def from_gate_chain(gate_chain):
+        qasm = gate_chain.to_qasm(qreg_name="q")
+        circuit_object = circuit_from_qasm_str(qasm)
+        return circuit_object
+
+    @staticmethod
+    def to_gate_chain(circuit_object, qmap=None, **kwargs):
+        qasm_data = circuit_to_qasm_str(circuit_object)
+        lines = qasm_data.split("\n")
+        gate_chain = GateChain.from_qasm_list_of_lines(lines, **kwargs)
+        assert len(gate_chain.qreg_mapping) == 1, "Only one quantum register is supported in Pytket converter"
+        qreg_name = list(gate_chain.qreg_mapping.keys())[0]
+
+        num_qubits = gate_chain.quantum_hardware.num_qubits
+        if qmap is not None:
+            # Pytket qubit placement Qmap object
+            qmap_dict = {k.index[0]: v.index[0] for (k, v) in qmap.items()}
+            gate_chain.qreg_mapping[qreg_name] = qmap_dict
+        # Default qreg mapping if placement is not provided
+        else:
+            gate_chain.qreg_mapping[qreg_name] = {q: q for q in range(num_qubits)}
+        return gate_chain
