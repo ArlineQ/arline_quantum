@@ -24,7 +24,7 @@ from arline_quantum.qubit_connectivities.qubit_connectivity import All2All, Qubi
 
 from cirq import LineQubit
 from qiskit.providers.models import GateConfig, QasmBackendConfiguration
-from qiskit.test.mock.fake_backend import FakeBackend
+from qiskit.providers.fake_provider.fake_backend import FakeBackend
 
 
 class Hardware:
