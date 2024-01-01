@@ -34,12 +34,11 @@ setuptools.setup(
     install_requires=[
         "numpy>=1.18.3",
         "scipy>=1.4",
-        "cirq==0.13.1",
-        "qiskit~=0.34.2",
+        "cirq",
+        "qiskit",
         "pyzx==0.6.0",
-        # old qiskit version to support pytket-qiskit
-        # "qiskit~=0.18.0",
         "sympy>=1.5",
+        "pytket",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
